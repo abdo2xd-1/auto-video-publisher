@@ -58,7 +58,7 @@ def generate_script_from_ai(prompt_context):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "google/gemini-2.0-flash-lite-001",
+        "model": "google/gemini-2.0-flash-001",
         "messages": [
             {
                 "role": "user",
