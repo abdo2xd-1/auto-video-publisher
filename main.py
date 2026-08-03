@@ -58,7 +58,7 @@ def generate_script_from_ai(prompt_context):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "google/gemini-2.0-flash-001",
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
         "messages": [
             {
                 "role": "user",
