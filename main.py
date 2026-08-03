@@ -48,17 +48,17 @@ def fetch_rss_headlines(query_url, max_items=5):
         return "لا توجد أحدث بيانات متاحة حالياً."
 
 def generate_script_from_ai(prompt_context):
-    """توليد السكربت عبر OpenRouter باللغة العربية"""
+    """توليد السكربت عبر OpenRouter باللغة العربية مع فحص دقيق للخطأ"""
     if not OPENROUTER_API_KEY:
-        raise Exception("مفتاح OPENROUTER_API_KEY غير موجود في أسرار GitHub!")
+        raise Exception("خطأ: مفتاح OPENROUTER_API_KEY غير موجود أو غير معرف في أسرار GitHub Secrets!")
 
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY.strip()}",
         "Content-Type": "application/json"
     }
     data = {
-        "model": "meta-llama/llama-3.1-8b-instruct:free",
+        "model": "google/gemini-2.0-flash-lite-001",
         "messages": [
             {
                 "role": "user",
@@ -66,14 +66,19 @@ def generate_script_from_ai(prompt_context):
             }
         ]
     }
-    response = requests.post(url, headers=headers, json=data)
-    result = response.json()
     
-    if 'choices' not in result:
-        print("OpenRouter Error Response:", result)
-        raise Exception(f"خطأ من OpenRouter API: {result.get('error', 'غير معروف')}")
-        
-    return result['choices'][0]['message']['content'].strip()
+    response = requests.post(url, headers=headers, json=data)
+    
+    if response.status_code != 200:
+        print(f"❌ خطأ من OpenRouter (الكود {response.status_code}):", response.text)
+        raise Exception(f"فشل الطلب من OpenRouter API: {response.text}")
+
+    result = response.json()
+    if 'choices' in result and len(result['choices']) > 0:
+        return result['choices'][0]['message']['content'].strip()
+    else:
+        print("❌ استجابة غير متوقعة من API:", result)
+        raise Exception("لم يتم استلام نص من الذكاء الاصطناعي.")
 
 async def text_to_speech(text, output_audio="audio.mp3"):
     """تحويل النص بصوت عربي شجي وممتاز"""
@@ -135,7 +140,7 @@ def process_prices_video():
     print("--- جاري إعداد فيديو أسعار الذهب والفضة والدواجن ---")
     today_date = get_today_date_str()
     
-    rss_url = "https://news.google.com/rss/search?q=%DD0%B3%D8%B9%D8%B1+%D8%A7%D9%84%D8%B0%D9%87%D8%A8+%D9%88%D8%A7%D9%84%D9%81%D8%B6%D8%A9+%D9%88%D8%A7%D9%84%D8%AF%D9%88%D8%A7%D8%AC%D9%86+%D8%A7%D9%84%D9%8A%D9%88%D9%85+%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar"
+    rss_url = "https://news.google.com/rss/search?q=%DD0%B3%D8%B9%D8%B1+%D8%A7%D9%84%D8%B0%D9%87%D8%A8+%D9%8والفضة+%D9%88%D8%A7%D9%84%D8%AF%D9%88%D8%A7%D8%AC%D9%86+%D8%A7%D9%84%D9%8A%D9%88%D9%85+%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar"
     prices_data = fetch_rss_headlines(rss_url)
     
     prompt = f"إليك أحدث الأخبار والبيانات المتاحة عن أسعار الذهب والفضة والدواجن اليوم في مصر:\n{prices_data}\n\nاكتب سكربت فيديو Shorts قصير يذكر تحديث أسعار الذهب والفضة وبورصة الدواجن اليوم بأسلوب سريع ومباشر باللغة العربية. اكتب السكربت فقط."
