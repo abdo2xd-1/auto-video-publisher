@@ -2,9 +2,8 @@ name: Daily Video Publisher
 
 on:
   schedule:
-    # يعمل تلقائياً يومياً الساعة 12 ظهراً بتوقيت UTC
     - cron: '0 12 * * *'
-  workflow_dispatch: # يتيح لك تشغيله يدوياً في أي وقت للاختبار
+  workflow_dispatch:
 
 jobs:
   build-and-publish:
@@ -30,5 +29,4 @@ jobs:
     - name: Run Main Script
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
       run: python main.py
