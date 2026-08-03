@@ -58,7 +58,7 @@ def generate_script_from_ai(prompt_context):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "meta-llama/llama-3.1-8b-instruct:free",
         "messages": [
             {
                 "role": "user",
