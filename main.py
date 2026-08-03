@@ -51,15 +51,18 @@ def fetch_rss_headlines(query_url, max_items=5):
 def generate_script_from_ai(prompt_context):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY.strip()}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {OPENROUTER_API_KEY.strip() if OPENROUTER_API_KEY else ''}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com",
+        "X-Title": "Auto-Video-Publisher"
     }
     
-    # قائمة بالنماذج المجانية للتنقل بينها تلقائياً في حال توقف أحدها
+    # قائمة بأحدث النماذج المجانية المتاحة على OpenRouter للتنقل بينها
     free_models = [
-        "meta-llama/llama-3.2-3b-instruct:free",
-        "google/gemini-2.0-flash-exp:free",
+        "google/gemini-2.0-flash-lite-001:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
         "deepseek/deepseek-r1:free",
+        "qwen/qwen-2.5-72b-instruct:free",
         "mistralai/mistral-7b-instruct:free"
     ]
     
@@ -68,14 +71,19 @@ def generate_script_from_ai(prompt_context):
             "model": model,
             "messages": [{"role": "user", "content": prompt_context}]
         }
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            result = response.json()
-            if 'choices' in result and len(result['choices']) > 0:
-                print(f"✅ تم التوليد بنجاح باستخدام النموذج: {model}")
-                return result['choices'][0]['message']['content'].strip()
-        else:
-            print(f"⚠️ النموذج {model} غير متاح حالياً، جاري تجربة النموذج التالي...")
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            if response.status_code == 200:
+                result = response.json()
+                if 'choices' in result and len(result['choices']) > 0:
+                    content = result['choices'][0]['message']['content']
+                    if content and content.strip():
+                        print(f"✅ تم التوليد بنجاح باستخدام النموذج: {model}")
+                        return content.strip()
+            
+            print(f"⚠️ النموذج {model} لم يستجب (الكود {response.status_code}): {response.text[:150]}")
+        except Exception as e:
+            print(f"⚠️ خطأ أثناء الاتصال بالنموذج {model}: {e}")
 
     raise Exception("❌ فشل الاتصال بجميع النماذج المجانية المتاحة.")
 
@@ -159,6 +167,5 @@ def process_prices_video():
     print(f"الوصف: {video_description}\n")
 
 if __name__ == "__main__":
-    # تنفيذ إنتاج الفيديوهات عند تشغيل السكربت
     process_daily_news_video()
     process_prices_video()
