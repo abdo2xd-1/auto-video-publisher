@@ -1,9 +1,9 @@
-name: Daily Video Publisher
-
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '0 21 * * *' # 12:00 منتصف الليل بتوقيت مصر
+    - cron: '0 2 * * *'  # 5:00 صباحاً بتوقيت مصر
+    - cron: '0 17 * * *' # 8:00 مساءً بتوقيت مصر
 
 jobs:
   build-and-publish:
