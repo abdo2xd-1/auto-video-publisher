@@ -3,7 +3,7 @@ name: Daily Video Publisher
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *' # يعمل تلقائياً يومياً الساعة 8 صباحاً بتوقيت UTC
+    - cron: '0 8 * * *'
 
 jobs:
   build-and-publish:
@@ -18,8 +18,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg and Arabic Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-amiri
 
       - name: Install Python Dependencies
         run: |
