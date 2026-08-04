@@ -3,3 +3,5 @@ edge-tts
 arabic-reshaper
 python-bidi
 Pillow
+yt-dlp
+Pillow
