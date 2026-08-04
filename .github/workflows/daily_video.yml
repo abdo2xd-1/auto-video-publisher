@@ -38,4 +38,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: daily-videos
-          path: "*.mp4"
+          path: final_videos/*.mp4
