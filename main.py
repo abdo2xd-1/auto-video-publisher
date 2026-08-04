@@ -20,39 +20,48 @@ WATERMARK_TEXT = "هل صليت على النبي اليوم"
 OUTPUT_DIR = "final_videos"
 
 def download_latest_from_channel(channel_url, output_filename):
-    """تحميل أحدث فيديو وتجاوز قيود يوتيوب على سيرفرات السحاب"""
+    """تحميل الفيديو مع مراعاة اختلاف المنصة (يوتيوب vs تيك توك)"""
     print(f"\n🔍 جاري فحص الرابط: {channel_url}")
     
-    ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',
-        'outtmpl': output_filename,
-        'playlist_items': '1',  # تحميل أحدث فيديو فقط
-        'overwrites': True,
-        'quiet': False,
-        'ignoreerrors': True,
-        # تجاور حظر يوتيوب في سيرفرات GitHub بعمل Emulator لتطبيق الموبايل
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['ios', 'android', 'mweb']
-            }
-        },
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+    is_tiktok = "tiktok.com" in channel_url
+    
+    if is_tiktok:
+        # إعدادات خاصة بتيك توك (بدون هيدرز معقدة تسبب الحظر)
+        ydl_opts = {
+            'format': 'bestvideo+bestaudio/best',
+            'outtmpl': output_filename,
+            'playlist_items': '1',
+            'overwrites': True,
+            'quiet': False,
+            'ignoreerrors': True
         }
-    }
+    else:
+        # إعدادات خاصة بيوتيوب لتجاوز حظر Datacenter IPs
+        ydl_opts = {
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'outtmpl': output_filename,
+            'playlist_items': '1',
+            'overwrites': True,
+            'quiet': False,
+            'ignoreerrors': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['tv_embedded', 'android', 'web']
+                }
+            }
+        }
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([channel_url])
         
-        # التأكد أن الملف نزل وله حجم فعلي
         if os.path.exists(output_filename) and os.path.getsize(output_filename) > 0:
             print(f"✅ تم التحميل بنجاح: {output_filename}")
             return True
         else:
-            print(f"❌ فشل تحميل الملف أو حجمه 0: {output_filename}")
+            print(f"❌ لم يتم إنشاء الملف أو الحجم 0: {output_filename}")
     except Exception as e:
-        print(f"⚠️ خطأ أثناء التحميل من {channel_url}: {e}")
+        print(f"⚠️ خطأ أثناء التحميل: {e}")
     return False
 
 def apply_watermark(input_file, output_file, logo_image_path="logo.png", text_brand=WATERMARK_TEXT):
@@ -90,6 +99,7 @@ def apply_watermark(input_file, output_file, logo_image_path="logo.png", text_br
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
+    successful_count = 0
     for idx, channel in enumerate(TARGET_CHANNELS, start=1):
         temp_input = f"temp_{idx}.mp4"
         final_output = os.path.join(OUTPUT_DIR, f"video_{idx}.mp4")
@@ -98,3 +108,6 @@ if __name__ == "__main__":
         success = download_latest_from_channel(channel, temp_input)
         if success:
             apply_watermark(temp_input, final_output, logo_image_path="logo.png")
+            successful_count += 1
+            
+    print(f"\n📊 النتيجة النهائية: تم معالجة {successful_count} فيديو بنجاح.")
