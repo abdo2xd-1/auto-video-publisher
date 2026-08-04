@@ -48,6 +48,28 @@ def fetch_rss_headlines(query_url, max_items=5):
         print("RSS Fetch Error:", e)
         return "لا توجد أحدث بيانات متاحة حالياً."
 
+def get_active_free_models():
+    """جلب قائمة النماذج المجانية النشطة تلقائياً من OpenRouter لمنع توقف السكربت مستقبلاً"""
+    url = "https://openrouter.ai/api/v1/models"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            models_data = response.json().get('data', [])
+            # فلترة النماذج التي تنتهي بـ :free وترتيبها
+            free_models = [m['id'] for m in models_data if m.get('id', '').endswith(':free')]
+            if free_models:
+                print(f"🌐 تم جلب {len(free_models)} نموذج مجاني نشط ديناميكياً من OpenRouter.")
+                return free_models
+    except Exception as e:
+        print(f"⚠️ فشل جلب القائمة الديناميكية: {e}")
+
+    # قائمة احتياطية في حال تعذر جلب قائمة النماذج تلقائياً
+    return [
+        "google/gemini-2.0-flash-exp:free",
+        "meta-llama/llama-3.2-1b-instruct:free",
+        "mistralai/mistral-7b-instruct:free"
+    ]
+
 def generate_script_from_ai(prompt_context):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
@@ -57,14 +79,8 @@ def generate_script_from_ai(prompt_context):
         "X-Title": "Auto-Video-Publisher"
     }
     
-    # قائمة أحدث النماذج المجانية النشطة حالياً على OpenRouter
-    free_models = [
-        "google/gemini-2.0-flash-thinking-exp:free",
-        "google/gemma-2-9b-it:free",
-        "meta-llama/llama-3.2-3b-instruct:free",
-        "qwen/qwen-2.5-7b-instruct:free",
-        "microsoft/phi-3-mini-128k-instruct:free"
-    ]
+    # جلب النماذج المجانية الشغالة حالياً
+    free_models = get_active_free_models()
     
     for model in free_models:
         data = {
@@ -81,7 +97,7 @@ def generate_script_from_ai(prompt_context):
                         print(f"✅ تم التوليد بنجاح باستخدام النموذج: {model}")
                         return content.strip()
             
-            print(f"⚠️ النموذج {model} لم يستجب (الكود {response.status_code}): {response.text[:150]}")
+            print(f"⚠️ النموذج {model} لم يستجب (الكود {response.status_code}): {response.text[:120]}")
         except Exception as e:
             print(f"⚠️ خطأ أثناء الاتصال بالنموذج {model}: {e}")
 
