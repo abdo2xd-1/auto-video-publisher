@@ -17,14 +17,20 @@ from PIL import Image, ImageDraw, ImageFont, ImageStat
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 def get_arabic_font(size=52):
-    """جلب الخط العربي المباشر المثبت على السيرفر لتفادي أي تشويه"""
+    """قراءة الخط العربي المحمل في المجلد الرئيسي"""
+    font_path = "Amiri-Bold.ttf"
+    if os.path.exists(font_path):
+        try:
+            return ImageFont.truetype(font_path, size)
+        except Exception:
+            pass
+            
+    # مسار احتياطي في حال وجود الخط في النظام
     system_font_path = "/usr/share/fonts/truetype/amiri/Amiri-Bold.ttf"
     if os.path.exists(system_font_path):
         return ImageFont.truetype(system_font_path, size)
-    try:
-        return ImageFont.truetype("Amiri-Bold.ttf", size)
-    except Exception:
-        return ImageFont.load_default()
+        
+    return ImageFont.load_default()
 
 def fix_arabic_text(text):
     """تعديل وتشكيل الحروف العربية واتجاه الكتابة"""
