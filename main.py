@@ -8,7 +8,7 @@ from googleapiclient.http import MediaFileUpload
 
 # ================= ⚙️ الإعدادات الأساسية =================
 # ضع رابط حساب التيك توك الذي تريد السحب منه
-TIKTOK_PROFILE_URL = "https://www.tiktok.com/@username_here"
+"TIKTOK_PROFILE_URL = "https://www.tiktok.com/@fcbarcelona"                                                                     "TIKTOK_PROFILE_URL = "https://www.tiktok.com/@khaby.lame"
 
 # رقم الواتساب لإرسال الإشعارات (بالصيغة الدولية بدون + أو 00 متبوعاً بـ @c.us)
 # مثال لمصر: "201012345678@c.us"
