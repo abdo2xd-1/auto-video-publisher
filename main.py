@@ -57,13 +57,13 @@ def generate_script_from_ai(prompt_context):
         "X-Title": "Auto-Video-Publisher"
     }
     
-    # قائمة بأحدث النماذج المجانية المتاحة على OpenRouter للتنقل بينها
+    # قائمة أحدث النماذج المجانية النشطة حالياً على OpenRouter
     free_models = [
-        "google/gemini-2.0-flash-lite-001:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "deepseek/deepseek-r1:free",
-        "qwen/qwen-2.5-72b-instruct:free",
-        "mistralai/mistral-7b-instruct:free"
+        "google/gemini-2.0-flash-thinking-exp:free",
+        "google/gemma-2-9b-it:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "qwen/qwen-2.5-7b-instruct:free",
+        "microsoft/phi-3-mini-128k-instruct:free"
     ]
     
     for model in free_models:
@@ -147,7 +147,6 @@ def process_prices_video():
     print("--- جاري إعداد فيديو أسعار الذهب والفضة والدواجن ---")
     today_date = get_today_date_str()
     
-    # تصحيح رابط التغذية والبحث باللغة العربية
     search_query = urllib.parse.quote("سعر الذهب والفضة والدواجن اليوم مصر")
     rss_url = f"https://news.google.com/rss/search?q={search_query}&hl=ar&gl=EG&ceid=EG:ar"
     prices_data = fetch_rss_headlines(rss_url)
