@@ -8,7 +8,21 @@ from googleapiclient.http import MediaFileUpload
 
 # ================= ⚙️ الإعدادات الأساسية =================
 # ضع رابط حساب التيك توك الذي تريد السحب منه
-TIKTOK_PROFILE_URL = "https://www.tiktok.com/@fcbarcelona"                                                                    
+import random
+
+# قائمة الحسابات (قصص + قرآن ودينية)
+TIKTOK_ACCOUNTS = [
+    # حسابات قصص
+    "https://www.tiktok.com/@story_account_1",
+    "https://www.tiktok.com/@story_account_2",
+    
+    # حسابات قرآن وأدعية دينية
+    "https://www.tiktok.com/@quran_account_1",
+    "https://www.tiktok.com/@quran_account_2",
+]
+
+# اختيار حساب عشوائي أو التتابع في كل مرة يشتغل فيها السكريبت
+TIKTOK_PROFILE_URL = random.choice(TIKTOK_ACCOUNTS)                                                                    
 
 # رقم الواتساب لإرسال الإشعارات (بالصيغة الدولية بدون + أو 00 متبوعاً بـ @c.us)
 # مثال لمصر: "201012345678@c.us"
