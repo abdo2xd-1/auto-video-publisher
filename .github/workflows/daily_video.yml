@@ -1,16 +1,16 @@
+name: Auto Video Publisher
+
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 21 * * *' # 12:00 منتصف الليل بتوقيت مصر
-    - cron: '0 2 * * *'  # 5:00 صباحاً بتوقيت مصر
-    - cron: '0 17 * * *' # 8:00 مساءً بتوقيت مصر
+    - cron: '*/30 * * * *' # تشغيل تلقائي كل 30 دقيقة
+  workflow_dispatch: # للتشغيل اليدوي
 
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -18,24 +18,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install FFmpeg and Download Arabic Font
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg wget
-          wget -O Amiri-Bold.ttf "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf"
-
-      - name: Install Python Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Main Script
+      - name: Run main script
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          GREEN_ID_INSTANCE: ${{ secrets.GREEN_ID_INSTANCE }}
+          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
         run: python main.py
-
-      - name: Upload Generated Videos
-        uses: actions/upload-artifact@v4
-        with:
-          name: daily-videos
-          path: final_videos/*.mp4
