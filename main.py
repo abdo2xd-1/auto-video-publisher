@@ -20,29 +20,43 @@ WATERMARK_TEXT = "هل صليت على النبي اليوم"
 OUTPUT_DIR = "final_videos"
 
 def download_latest_from_channel(channel_url, output_filename):
-    """تحميل أحدث فيديو بمرونة كاملة وبدون قيود ترميز صلبة"""
+    """تحميل أحدث فيديو وتجاوز قيود يوتيوب على سيرفرات السحاب"""
     print(f"\n🔍 جاري فحص الرابط: {channel_url}")
+    
     ydl_opts = {
-        'format': 'best',
+        'format': 'bestvideo+bestaudio/best',
         'outtmpl': output_filename,
-        'playlistend': 1,
+        'playlist_items': '1',  # تحميل أحدث فيديو فقط
         'overwrites': True,
         'quiet': False,
         'ignoreerrors': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        # تجاور حظر يوتيوب في سيرفرات GitHub بعمل Emulator لتطبيق الموبايل
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android', 'mweb']
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+        }
     }
+    
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([channel_url])
-        if os.path.exists(output_filename):
+        
+        # التأكد أن الملف نزل وله حجم فعلي
+        if os.path.exists(output_filename) and os.path.getsize(output_filename) > 0:
             print(f"✅ تم التحميل بنجاح: {output_filename}")
             return True
+        else:
+            print(f"❌ فشل تحميل الملف أو حجمه 0: {output_filename}")
     except Exception as e:
-        print(f"⚠️ تعذر التحميل من {channel_url}: {e}")
+        print(f"⚠️ خطأ أثناء التحميل من {channel_url}: {e}")
     return False
 
 def apply_watermark(input_file, output_file, logo_image_path="logo.png", text_brand=WATERMARK_TEXT):
-    """دمج اللوجو بحجم مخصص (180px) وإعادة الترميز بدقة عالية لجميع المشغلات"""
+    """دمج اللوجو وتوحيد الترميز لتشغيله على أي مشغل"""
     print(f"🎨 جاري إضافة العلامة المائية وتوحيد الصيغة...")
     
     if os.path.exists(logo_image_path):
@@ -70,7 +84,6 @@ def apply_watermark(input_file, output_file, logo_image_path="logo.png", text_br
     subprocess.run(cmd, check=True)
     print(f"✨ تم إنتاج الفيديو النهائي: {output_file}")
     
-    # مسح الفيديو المؤقت لتوفير المساحة
     if os.path.exists(input_file):
         os.remove(input_file)
 
