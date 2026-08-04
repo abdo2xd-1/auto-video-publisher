@@ -1,33 +1,15 @@
 import os
+import time
 import subprocess
-import urllib.parse
 import yt_dlp
 
-# قائمة حسابات تيك توك (قصص وقرآن كريم)
+# =========================================================
+# 📌 قائمة الـ 100 حساب تيك توك المستهدفة (50 قرآن + 50 قصص)
+# =========================================================
 TARGET_CHANNELS = [
-    # --- حسابات قصص وريديت ---
-    "https://www.tiktok.com/@reddit.stories.ar",
-    "https://www.tiktok.com/@arabic_reddit_stories",
-    "https://www.tiktok.com/@reddit_stories_eg",
-    "https://www.tiktok.com/@reddit_arabic",
-    "https://www.tiktok.com/@" + urllib.parse.quote("قصص_ريديت_بالعربي"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("حكايات_الذكاء_الاصطناعي"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("قصص_وحكايات_واقعية"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("قصص_قبل_النوم_AR"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("اعترافات_واقعية"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("قصص_دراما_غموض"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("حكايات_من_الحياة"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("روايات_قصيرة_ar"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("قصص_مؤثرة_AR"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("عالم_القصص_المترجمة"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("حكاية_في_دقيقة"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("قصص_جرائم_واقعية"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("غموض_وحكايات"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("قصص_تيكتوك_الشهيرة"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("قصص_ومواقف_صعبة"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("حكايات_الواقع"),
-
-    # --- حسابات تلاوات القرآن الكريم والقراء ---
+    # ------------------------------------------------------
+    # 📖 [ 50 حساب قرآن كريم وتلاوات خاشعة ]
+    # ------------------------------------------------------
     "https://www.tiktok.com/@yasser_aldosari",
     "https://www.tiktok.com/@islamsobhiofficial",
     "https://www.tiktok.com/@alafasy",
@@ -50,29 +32,101 @@ TARGET_CHANNELS = [
     "https://www.tiktok.com/@quran_status",
     "https://www.tiktok.com/@quran_daily_verses",
     "https://www.tiktok.com/@quran_shorts_ar",
-    "https://www.tiktok.com/@" + urllib.parse.quote("راحه_نفسيه_قران"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("تلاوات_مؤثرة"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("روائع_القرآن"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("نور_القرآن"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("ايات_من_الذكر_الحكيم"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("صدقة_جارية_قران"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("مجلس_القرآن"),
-    "https://www.tiktok.com/@" + urllib.parse.quote("هدى_القرآن")
+    "https://www.tiktok.com/@tilawat_khashia",
+    "https://www.tiktok.com/@quran.333",
+    "https://www.tiktok.com/@quran_ar",
+    "https://www.tiktok.com/@quran.verses1",
+    "https://www.tiktok.com/@versesofquran",
+    "https://www.tiktok.com/@quran.mp3",
+    "https://www.tiktok.com/@holy_quran_1",
+    "https://www.tiktok.com/@quran_karim_9",
+    "https://www.tiktok.com/@quran_station",
+    "https://www.tiktok.com/@quran_hd",
+    "https://www.tiktok.com/@quran_radio",
+    "https://www.tiktok.com/@quran_for_you",
+    "https://www.tiktok.com/@quran_recitation",
+    "https://www.tiktok.com/@quran_soul",
+    "https://www.tiktok.com/@quran_light",
+    "https://www.tiktok.com/@quran_islamic",
+    "https://www.tiktok.com/@quran_noor",
+    "https://www.tiktok.com/@quran_37",
+    "https://www.tiktok.com/@tilawat_quran",
+    "https://www.tiktok.com/@quran_live",
+    "https://www.tiktok.com/@quran_karem_1",
+    "https://www.tiktok.com/@quran_reminder1",
+    "https://www.tiktok.com/@quran_audio",
+    "https://www.tiktok.com/@quran_clips",
+    "https://www.tiktok.com/@quran_peace",
+    "https://www.tiktok.com/@quran_world",
+    "https://www.tiktok.com/@quran_media",
+    "https://www.tiktok.com/@quran_top",
+
+    # ------------------------------------------------------
+    # 🎭 [ 50 حساب قصص ريديت وحكايات درامية ]
+    # ------------------------------------------------------
+    "https://www.tiktok.com/@reddit.stories.ar",
+    "https://www.tiktok.com/@arabic_reddit_stories",
+    "https://www.tiktok.com/@reddit_stories_eg",
+    "https://www.tiktok.com/@reddit_arabic",
+    "https://www.tiktok.com/@reddit_stories_daily",
+    "https://www.tiktok.com/@reddit.stories",
+    "https://www.tiktok.com/@redditstories_ar",
+    "https://www.tiktok.com/@reddit_drama",
+    "https://www.tiktok.com/@redditstories_official",
+    "https://www.tiktok.com/@reddit_tales",
+    "https://www.tiktok.com/@reddit_storys_ar",
+    "https://www.tiktok.com/@reddit_hub_ar",
+    "https://www.tiktok.com/@reddit_stories_3",
+    "https://www.tiktok.com/@reddit.stories.eg",
+    "https://www.tiktok.com/@storytime_ar",
+    "https://www.tiktok.com/@arabic_stories_1",
+    "https://www.tiktok.com/@drama_stories_ar",
+    "https://www.tiktok.com/@stories_reddit_ar",
+    "https://www.tiktok.com/@reddit_arabic_stories",
+    "https://www.tiktok.com/@reddit.shorts.ar",
+    "https://www.tiktok.com/@reddit_talk_ar",
+    "https://www.tiktok.com/@reddit_clips_ar",
+    "https://www.tiktok.com/@reddit_stories101",
+    "https://www.tiktok.com/@reddit_stories_hd",
+    "https://www.tiktok.com/@reddit_stories_pro",
+    "https://www.tiktok.com/@reddit_tales_ar",
+    "https://www.tiktok.com/@reddit_arabic_official",
+    "https://www.tiktok.com/@reddit_stories_arabic",
+    "https://www.tiktok.com/@stories_ar_1",
+    "https://www.tiktok.com/@reddit_stories_club",
+    "https://www.tiktok.com/@reddit_stories_plus",
+    "https://www.tiktok.com/@reddit_stories_box",
+    "https://www.tiktok.com/@reddit_stories_world",
+    "https://www.tiktok.com/@reddit_stories_vids",
+    "https://www.tiktok.com/@reddit_stories_now",
+    "https://www.tiktok.com/@reddit_stories_vip",
+    "https://www.tiktok.com/@reddit_stories_hub",
+    "https://www.tiktok.com/@reddit_stories_zone",
+    "https://www.tiktok.com/@reddit_stories_time",
+    "https://www.tiktok.com/@reddit_stories_app",
+    "https://www.tiktok.com/@reddit_stories_net",
+    "https://www.tiktok.com/@reddit_stories_tv",
+    "https://www.tiktok.com/@reddit_stories_cast",
+    "https://www.tiktok.com/@reddit_stories_feed",
+    "https://www.tiktok.com/@reddit_stories_life",
+    "https://www.tiktok.com/@reddit_stories_show",
+    "https://www.tiktok.com/@reddit_stories_spot",
+    "https://www.tiktok.com/@reddit_stories_channel",
+    "https://www.tiktok.com/@reddit_stories_page",
+    "https://www.tiktok.com/@reddit_stories_room"
 ]
 
 WATERMARK_TEXT = "هل صليت على النبي اليوم"
 OUTPUT_DIR = "final_videos"
 
 def download_latest_from_tiktok(channel_url, output_filename):
-    """جلب وتحميل أحدث فيديو من تيك توك بأعلى جودة متوفرة"""
-    print(f"\n🔍 جاري فحص الحساب: {channel_url}")
-    
+    """تحميل أحدث فيديو بمرونة وبدون تأخير"""
     ydl_opts = {
         'format': 'bestvideo+bestaudio/best',
         'outtmpl': output_filename,
-        'playlist_items': '1',  # أحدث فيديو فقط
+        'playlist_items': '1',
         'overwrites': True,
-        'quiet': False,
+        'quiet': True,
         'ignoreerrors': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
@@ -82,18 +136,13 @@ def download_latest_from_tiktok(channel_url, output_filename):
             ydl.download([channel_url])
         
         if os.path.exists(output_filename) and os.path.getsize(output_filename) > 0:
-            print(f"✅ تم تحميل الفيديو بنجاح: {output_filename}")
-            return True
-        else:
-            print(f"⚠️ لم يتم العثور على فيديوهات جديدة في: {channel_url}")
+            return True, "تم التحميل بنجاح"
+        return False, "لم يتم العثور على الفيديو أو الحجم صفر"
     except Exception as e:
-        print(f"❌ تعذر التحميل من {channel_url}: {e}")
-    return False
+        return False, str(e)
 
-def apply_watermark(input_file, output_file, logo_image_path="logo.png", text_brand=WATERMARK_TEXT):
-    """تطبيق العلامة المائية logo.png وتوحيد صيغة MP4 بجودة عالية"""
-    print(f"🎨 جاري دمج العلامة المائية...")
-    
+def apply_watermark(input_file, output_file, logo_image_path="logo.png"):
+    """دمج العلامة المائية وتوحيد صيغة MP4 بجودة عالية"""
     if os.path.exists(logo_image_path):
         cmd = [
             "ffmpeg", "-y",
@@ -109,32 +158,45 @@ def apply_watermark(input_file, output_file, logo_image_path="logo.png", text_br
         cmd = [
             "ffmpeg", "-y",
             "-i", input_file,
-            "-vf", f"drawtext=text='{text_brand}':x=W-tw-40:y=60:fontsize=36:fontcolor=white:box=1:boxcolor=black@0.5",
+            "-vf", f"drawtext=text='{WATERMARK_TEXT}':x=W-tw-40:y=60:fontsize=36:fontcolor=white:box=1:boxcolor=black@0.5",
             "-c:v", "libx264",
             "-preset", "fast",
             "-c:a", "aac",
             output_file
         ]
         
-    subprocess.run(cmd, check=True)
-    print(f"✨ تم تجهيز الفيديو النهائي: {output_file}")
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
-    # حذف الملف المؤقت لتوفير مساحة السيرفر
     if os.path.exists(input_file):
         os.remove(input_file)
 
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
-    total_processed = 0
+    successful_count = 0
+    failed_count = 0
+    total_accounts = len(TARGET_CHANNELS)
+    
+    print(f"🚀 بدء معالجة {total_accounts} حساب تيك توك (قرآن وقصص)...\n")
+    
     for idx, channel in enumerate(TARGET_CHANNELS, start=1):
         temp_input = f"temp_{idx}.mp4"
         final_output = os.path.join(OUTPUT_DIR, f"video_{idx}.mp4")
         
-        print(f"\n--- 🎬 [ معالجة الحساب {idx} من أصل {len(TARGET_CHANNELS)} ] ---")
-        success = download_latest_from_tiktok(channel, temp_input)
+        print(f"[{idx}/{total_accounts}] 🔍 فحص الحساب: {channel}")
+        success, msg = download_latest_from_tiktok(channel, temp_input)
+        
         if success:
-            apply_watermark(temp_input, final_output, logo_image_path="logo.png")
-            total_processed += 1
+            try:
+                apply_watermark(temp_input, final_output, logo_image_path="logo.png")
+                successful_count += 1
+                print(f"  └─ ✅ نجح التنزيل وإضافة العلامة المائية")
+            except Exception as ex:
+                print(f"  └─ ⚠️ فشل المونتاج: {ex}")
+        else:
+            failed_count += 1
+            print(f"  └─ ❌ تعذر التحميل: {msg}")
             
-    print(f"\n🎉 اكتمل العمل! تم معالجة وتجهيز {total_processed} فيديو بنجاح.")
+        time.sleep(1) # مهلة ثانية واحدة لتفادي حظر الطلبات المتتالية
+        
+    print(f"\n📊 [ النتيجة النهائية ]: نجح معالجة {successful_count} فيديو | فشل {failed_count} حساب.")
