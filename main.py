@@ -30,7 +30,7 @@ TARGET_CHANNELS = [
 
 MY_PHONE_NUMBER = "201211615424@c.us"
 OUTPUT_DIR = "final_videos"
-VIDEOS_PER_RUN = 6  # تم التعديل لرفع 6 فيديوهات دفعة واحدة
+VIDEOS_PER_RUN = 100  # تم التعديل لرفع 6 فيديوهات دفعة واحدة
 
 def ensure_directories():
     if not os.path.exists(OUTPUT_DIR):
