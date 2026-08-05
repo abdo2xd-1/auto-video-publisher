@@ -1,305 +1,51 @@
-import os
-import glob
-import json
-import time
-import random
-import re
-import subprocess
-import requests
-import yt_dlp
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-from instagrapi import Client
+name: Auto Video Publisher
 
-# ==========================================
-# 📌 القوائم والملفات الأساسية
-# ==========================================
-DEFAULT_TARGET_CHANNELS = [
-    "https://www.tiktok.com/@yasser_aldosari",
-    "https://www.tiktok.com/@islamsobhiofficial",
-    "https://www.tiktok.com/@alafasy",
-    "https://www.tiktok.com/@maher_almuaiqly",
-    "https://www.tiktok.com/@mansour_alsalmi",
-    "https://www.tiktok.com/@hazza_alblushi",
-    "https://www.tiktok.com/@sherif_mostafa",
-    "https://www.tiktok.com/@ahmed_alnufais",
-    "https://www.tiktok.com/@fcbarcelona",
-    "https://www.tiktok.com/@khaby.lame",
-]
+on:
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
 
-MY_PHONE_NUMBER = "201211615424@c.us"
-OUTPUT_DIR = "final_videos"
-POSTED_HISTORY_FILE = "posted_videos.json"
-USER_CHANNELS_FILE = "user_channels.json"
-IG_SESSION_FILE = "ig_session.json"
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
 
-# ==========================================
-# 💾 إدارة الملفات والبيانات
-# ==========================================
-def load_json(filename, default_value):
-    if os.path.exists(filename):
-        try:
-            with open(filename, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            return default_value
-    return default_value
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-def save_json(filename, data):
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-def ensure_directories():
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
-# ==========================================
-# 📱 فحص رسائل الواتساب الواردة
-# ==========================================
-def process_whatsapp_incoming():
-    id_instance = os.environ.get("GREEN_ID_INSTANCE")
-    api_token = os.environ.get("GREEN_API_TOKEN")
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yt-dlp google-api-python-client google-auth-oauthlib google-auth-httplib2 requests instagrapi Pillow
 
-    if not id_instance or not api_token:
-        return None
+      - name: Run main script
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_REFRESH_TOKEN_2: ${{ secrets.YOUTUBE_REFRESH_TOKEN_2 }}
+          GREEN_ID_INSTANCE: ${{ secrets.GREEN_ID_INSTANCE }}
+          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+          INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
+          INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
+        run: python main.py
 
-    url = f"https://api.green-api.com/waInstance{id_instance}/lastIncomingMessages/{api_token}?minutes=240"
-    direct_video_url = None
-
-    try:
-        res = requests.get(url, timeout=10)
-        if res.status_code == 200:
-            messages = res.json()
-            user_channels = load_json(USER_CHANNELS_FILE, [])
-            updated = False
-
-            for msg in messages:
-                sender = msg.get("senderData", {}).get("chatId")
-                if sender == MY_PHONE_NUMBER:
-                    text_data = msg.get("messageData", {}).get("textMessageData", {}).get("textMessage", "")
-                    urls = re.findall(r'https?://[^\s]*tiktok\.com[^\s]*', text_data)
-
-                    for link in urls:
-                        if "/video/" in link or "vt.tiktok.com" in link or "vm.tiktok.com" in link:
-                            direct_video_url = link
-                        elif "@" in link:
-                            clean_channel = link.split("?")[0]
-                            if clean_channel not in user_channels:
-                                user_channels.append(clean_channel)
-                                updated = True
-                                print(f"➕ تم إضافة صفحة مخصصة جديدة: {clean_channel}")
-
-            if updated:
-                save_json(USER_CHANNELS_FILE, user_channels)
-
-    except Exception as e:
-        print(f"⚠️ خطأ أثناء قراءة الواتساب: {e}")
-
-    return direct_video_url
-
-def send_whatsapp_message(text):
-    id_instance = os.environ.get("GREEN_ID_INSTANCE")
-    api_token = os.environ.get("GREEN_API_TOKEN")
-
-    if not id_instance or not api_token:
-        return
-
-    url = f"https://api.green-api.com/waInstance{id_instance}/sendMessage/{api_token}"
-    payload = {"chatId": MY_PHONE_NUMBER, "message": text}
-    try:
-        requests.post(url, json=payload, timeout=15)
-    except Exception as e:
-        print(f"❌ خطأ إرسال الواتساب: {e}")
-
-# ==========================================
-# 🖼️ دمج العلامة المائية (اللوجو)
-# ==========================================
-def apply_logo_watermark(input_video_path, logo_path="logo.png"):
-    if not os.path.exists(logo_path):
-        print(f"ℹ️ لم يتم العثور على اللوجو ({logo_path}).")
-        return input_video_path
-
-    output_video_path = f"{OUTPUT_DIR}/watermarked_{random.randint(1000,9999)}.mp4"
-    print("🎨 جاري وضع اللوجو...")
-    ffmpeg_cmd = [
-        'ffmpeg', '-y',
-        '-i', input_video_path,
-        '-i', logo_path,
-        '-filter_complex', '[1:v]scale=120:-1[logo];[0:v][logo]overlay=W-w-20:20',
-        '-c:a', 'copy',
-        output_video_path
-    ]
-    try:
-        subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return output_video_path
-    except Exception as e:
-        print(f"⚠️ فشل إضافة اللوجو: {e}")
-        return input_video_path
-
-# ==========================================
-# 📥 تنزيل الفيديو بدون تكرار
-# ==========================================
-def download_video(custom_video_url=None):
-    posted_history = load_json(POSTED_HISTORY_FILE, [])
-
-    if custom_video_url:
-        print(f"📥 جاري معالجة فيديو مخصص من الواتساب: {custom_video_url}")
-        ydl_opts = {'outtmpl': f'{OUTPUT_DIR}/downloaded_raw_%(id)s.%(ext)s', 'format': 'mp4/bestvideo+bestaudio/best', 'overwrites': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(custom_video_url, download=True)
-            video_id = info.get('id')
-            if video_id not in posted_history:
-                downloaded_files = glob.glob(f"{OUTPUT_DIR}/downloaded_raw_*")
-                if downloaded_files:
-                    return downloaded_files[0], info.get('title', 'فيديو جديد'), video_id
-            else:
-                print("⚠️ هذا الفيديو تم نشره سابقاً!")
-
-    user_channels = load_json(USER_CHANNELS_FILE, [])
-    remove_count = len(user_channels) * 10
-    remaining_defaults = DEFAULT_TARGET_CHANNELS[remove_count:] if remove_count < len(DEFAULT_TARGET_CHANNELS) else []
-    active_pool = user_channels + remaining_defaults
-    if not active_pool:
-        active_pool = user_channels
-
-    print(f"📊 القنوات النشطة: {len(active_pool)} (صفحاتك: {len(user_channels)})")
-
-    for attempt in range(15):
-        selected_channel = random.choice(active_pool)
-        random_video_index = random.randint(1, 15)
-        ydl_opts = {
-            'outtmpl': f'{OUTPUT_DIR}/downloaded_raw_%(id)s.%(ext)s',
-            'playlist_items': str(random_video_index),
-            'format': 'mp4/bestvideo+bestaudio/best',
-            'match_filter': yt_dlp.utils.match_filter_func('duration <= 60'),
-            'overwrites': True,
-            'quiet': True,
-        }
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(selected_channel, download=False)
-                entries = info.get('entries', [])
-                if entries:
-                    video_data = entries[0]
-                    vid_id = video_data.get('id')
-                    if vid_id not in posted_history:
-                        ydl.download([video_data.get('webpage_url', selected_channel)])
-                        downloaded_files = glob.glob(f"{OUTPUT_DIR}/downloaded_raw_*")
-                        if downloaded_files:
-                            return downloaded_files[0], video_data.get('title', 'فيديو جديد'), vid_id
-                    else:
-                        print(f"⏭️ تخطي فيديو مكرر (ID: {vid_id})")
-        except Exception as e:
-            print(f"⚠️ خطأ أثناء التنزيل: {e}")
-
-    raise Exception("❌ لم يتم العثور على أي فيديو جديد غير مكرر.")
-
-# ==========================================
-# 📤 الرفع على قنوات يوتيوب
-# ==========================================
-def upload_to_youtube(video_path, title):
-    client_id = os.environ.get("YOUTUBE_CLIENT_ID")
-    client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
-    channels = []
-    if os.environ.get("YOUTUBE_REFRESH_TOKEN"):
-        channels.append(("اليوتيوب 1 🔴", os.environ.get("YOUTUBE_REFRESH_TOKEN")))
-    if os.environ.get("YOUTUBE_REFRESH_TOKEN_2"):
-        channels.append(("اليوتيوب 2 🔵", os.environ.get("YOUTUBE_REFRESH_TOKEN_2")))
-
-    results = []
-    full_title = f"{title[:75]} #Shorts"
-
-    for ch_name, refresh_token in channels:
-        print(f"🚀 جاري الرفع إلى {ch_name}...")
-        try:
-            creds = Credentials(None, refresh_token=refresh_token, token_uri="https://oauth2.googleapis.com/token", client_id=client_id, client_secret=client_secret)
-            youtube = build("youtube", "v3", credentials=creds)
-            body = {"snippet": {"title": full_title, "description": f"{title}\n\n#Shorts #Viral", "categoryId": "22"}, "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}}
-            media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
-            req = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
-            res = None
-            while res is None:
-                _, res = req.next_chunk()
-
-            yt_link = f"https://youtube.com/shorts/{res.get('id')}"
-            print(f"✅ تم الرفع بنجاح على {ch_name}: {yt_link}")
-            results.append(f"{ch_name}: {yt_link}")
-        except Exception as e:
-            print(f"❌ فشل الرفع على {ch_name}: {e}")
-            results.append(f"{ch_name}: فشل الرفع ({e})")
-    return results
-
-# ==========================================
-# 🟣 الرفع على انستجرام Reels
-# ==========================================
-def upload_to_instagram(video_path, caption):
-    username = os.environ.get("INSTAGRAM_USERNAME")
-    password = os.environ.get("INSTAGRAM_PASSWORD")
-    if not username or not password:
-        return "انستجرام Reels 🟣: غير متوفرة بيانات تسجيل الدخول"
-
-    print("🚀 جاري الرفع إلى انستجرام Reels...")
-    try:
-        cl = Client()
-        # محاكاة إصدار جديد لتجاوز حظر Out of date
-        cl.set_user_agent("Instagram 315.0.0.33.109 Android (33/13; 480dpi; 1080x2269; Xiaomi; POCO F3; alioth; qcom; en_US; 560877903)")
-
-        if os.path.exists(IG_SESSION_FILE):
-            try:
-                cl.load_settings(IG_SESSION_FILE)
-            except Exception as e:
-                print(f"⚠️ تعذر تحميل الجلسة السابقة: {e}")
-
-        cl.login(username, password)
-        cl.dump_settings(IG_SESSION_FILE)
-
-        clean_caption = f"{caption[:1000]}\n\n#Reels #Shorts #Viral #Trending"
-        media = cl.clip_upload(video_path, caption=clean_caption)
-        print(f"✅ تم الرفع على انستجرام Reels بنجاح! ID: {media.pk}")
-        return f"انستجرام Reels 🟣: تم النشر بنجاح!"
-    except Exception as e:
-        print(f"❌ فشل الرفع على انستجرام: {e}")
-        return f"انستجرام Reels 🟣: فشل الرفع ({str(e)[:80]})"
-
-# ==========================================
-# 🚀 التشغيل الرئيسي
-# ==========================================
-def main():
-    ensure_directories()
-    try:
-        direct_video_url = process_whatsapp_incoming()
-        raw_video_path, title, video_id = download_video(custom_video_url=direct_video_url)
-        final_video_path = apply_logo_watermark(raw_video_path, logo_path="logo.png")
-
-        # الرفع لكل من يوتيوب وانستجرام
-        yt_results = upload_to_youtube(final_video_path, title)
-        ig_result = upload_to_instagram(final_video_path, title)
-
-        # حفظ سجل منع التكرار
-        posted_history = load_json(POSTED_HISTORY_FILE, [])
-        if video_id and video_id not in posted_history:
-            posted_history.append(video_id)
-            save_json(POSTED_HISTORY_FILE, posted_history)
-
-        # تقرير الواتساب
-        all_reports = yt_results + [ig_result]
-        report_text = "\n".join(all_reports)
-        msg = f"🎉 *تم نشر فيديو Shorts/Reels جديد!*\n\n📝 *العنوان:* {title}\n\n📊 *الحالة:*\n{report_text}"
-        send_whatsapp_message(msg)
-
-        # تنظيف
-        for file in glob.glob(f"{OUTPUT_DIR}/*"):
-            try:
-                os.remove(file)
-            except Exception:
-                pass
-
-    except Exception as e:
-        error_msg = f"❌ *حدث خطأ أثناء أتمتة النشر:*\n{str(e)}"
-        print(error_msg)
-        send_whatsapp_message(error_msg)
-        raise e
-
-if __name__ == "__main__":
-    main()
+      - name: Save changes back to repository
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add posted_videos.json user_channels.json ig_session.json || true
+          git commit -m "🤖 Update posted history" || exit 0
+          git push
