@@ -1,161 +1,68 @@
 import os
-import glob
-import time
-import random
-import subprocess
 import requests
 import yt_dlp
+import subprocess
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# ==========================================
-# 📌 قائمة الحسابات (قرآن + قصص)
-# ==========================================
-TARGET_CHANNELS = [
-    # --- حسابات قرآن ودينية ---
-    "https://www.tiktok.com/@yasser_aldosari",
-    "https://www.tiktok.com/@islamsobhiofficial",
-    "https://www.tiktok.com/@alafasy",
-    "https://www.tiktok.com/@maher_almuaiqly",
-    "https://www.tiktok.com/@mansour_alsalmi",
-    "https://www.tiktok.com/@hazza_alblushi",
-    "https://www.tiktok.com/@sherif_mostafa",
-    "https://www.tiktok.com/@ahmed_alnufais",
-    
-    # --- حسابات قصص وترفيه ---
-    "https://www.tiktok.com/@fcbarcelona",
-    "https://www.tiktok.com/@khaby.lame",
+# --- المتغيرات البيئية ---
+CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID")
+CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET")
+
+# قائمة التوكينات الخاصة بكل قناة
+REFRESH_TOKENS = [
+    os.getenv("YOUTUBE_REFRESH_TOKEN_1"),
+    os.getenv("YOUTUBE_REFRESH_TOKEN_2")
 ]
 
-MY_PHONE_NUMBER = "201211615424@c.us"
-OUTPUT_DIR = "final_videos"
-VIDEOS_PER_RUN = 100  # تم التعديل لرفع 6 فيديوهات دفعة واحدة
+GREEN_API_INSTANCE = os.getenv("GREEN_API_INSTANCE_ID")
+GREEN_API_TOKEN = os.getenv("GREEN_API_TOKEN")
+WHATSAPP_PHONE = os.getenv("WHATSAPP_PHONE_NUMBER")
 
-def ensure_directories():
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+# رابط تيك توك المستهدف (أو قائمة الحسابات)
+TIKTOK_TARGET = "https://www.tiktok.com/@example_account"
 
-# ==========================================
-# 📱 إرسال إشعار الواتساب عبر Green API
-# ==========================================
-def send_whatsapp_message(text):
-    id_instance = os.environ.get("GREEN_ID_INSTANCE")
-    api_token = os.environ.get("GREEN_API_TOKEN")
 
-    if not id_instance or not api_token:
-        print("⚠️ أسرار Green API غير متوفرة في GitHub Secrets.")
-        return
-
-    url = f"https://api.green-api.com/waInstance{id_instance}/sendMessage/{api_token}"
-    payload = {
-        "chatId": MY_PHONE_NUMBER,
-        "message": text
+def download_tiktok_video(url, output_path="downloaded.mp4"):
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best',
+        'outtmpl': output_path,
+        'overwrites': True
     }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    return output_path
 
-    try:
-        res = requests.post(url, json=payload, timeout=15)
-        print(f"📱 استجابة الواتساب: {res.status_code} - {res.text}")
-    except Exception as e:
-        print(f"❌ خطأ أثناء إرسال رسالة الواتساب: {e}")
 
-# ==========================================
-# 🖼️ دالة دمج اللوجو مع الفيديو عبر FFmpeg
-# ==========================================
-def apply_logo_watermark(input_video_path, logo_path="logo.png"):
-    if not os.path.exists(logo_path):
-        print(f"ℹ️ لم يتم العثور على ملف اللوجو ({logo_path}). سيتم النشر بدون لوجو.")
-        return input_video_path
+def add_watermark(input_video, watermark_image="logo.png", output_video="final_video.mp4"):
+    if not os.path.exists(watermark_image):
+        print("ملف اللوجو غير موجود، سيتم رفع الفيديو بدون لوجو.")
+        return input_video
+    
+    # دمج اللوجو في أعلى اليسار باستخدام FFmpeg
+    cmd = f"ffmpeg -i {input_video} -i {watermark_image} -filter_complex 'overlay=10:10' -codec:a copy {output_video} -y"
+    subprocess.run(cmd, shell=True, check=True)
+    return output_video
 
-    output_video_path = f"{OUTPUT_DIR}/watermarked_{random.randint(1000,9999)}.mp4"
-    print("🎨 جاري دمج اللوجو مع الفيديو...")
 
-    ffmpeg_cmd = [
-        'ffmpeg', '-y',
-        '-i', input_video_path,
-        '-i', logo_path,
-        '-filter_complex', '[1:v]scale=120:-1[logo];[0:v][logo]overlay=W-w-20:20',
-        '-c:a', 'copy',
-        output_video_path
-    ]
-
-    try:
-        subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print("✅ تم إضافة اللوجو بنجاح!")
-        return output_video_path
-    except Exception as e:
-        print(f"⚠️ فشل وضع اللوجو، سيتم استخدام الفيديو الأصلي: {e}")
-        return input_video_path
-
-# ==========================================
-# 📥 تنزيل فيديو قصير أقل من 60 ثانية
-# ==========================================
-def download_random_short_video():
-    max_attempts = 10
-    for attempt in range(max_attempts):
-        selected_channel = random.choice(TARGET_CHANNELS)
-        random_video_index = random.randint(1, 15)
-        
-        print(f"🔍 [محاولة {attempt+1}] جاري السحب من: {selected_channel} (فيديو رقم {random_video_index})")
-
-        ydl_opts = {
-            'outtmpl': f'{OUTPUT_DIR}/downloaded_raw_%(id)s.%(ext)s',
-            'playlist_items': str(random_video_index),
-            'format': 'mp4/bestvideo+bestaudio/best',
-            'match_filter': yt_dlp.utils.match_filter_func('duration <= 60'),
-            'overwrites': True,
-            'quiet': False,
-            'no_warnings': True,
-        }
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(selected_channel, download=True)
-                if 'entries' in info and len(info['entries']) > 0:
-                    video_info = info['entries'][0]
-                else:
-                    video_info = info
-
-                title = video_info.get('title', 'فيديو جديد')
-                downloaded_files = glob.glob(f"{OUTPUT_DIR}/downloaded_raw_*")
-                
-                if downloaded_files:
-                    return downloaded_files[0], title
-                else:
-                    print("⚠️ الفيديو يتجاوز 60 ثانية، جاري المحاولة مع فيديو آخر...")
-        except Exception as e:
-            print(f"⚠️ تعذر التنزيل: {e}")
-
-    raise Exception("❌ تعذر العثور على فيديو قصير مناسب بعد عدة محاولات.")
-
-# ==========================================
-# 📤 الرفع إلى يوتيوب
-# ==========================================
-def upload_to_youtube(video_path, title):
-    print("🚀 جاري رفع الفيديو إلى يوتيوب...")
-
-    client_id = os.environ.get("YOUTUBE_CLIENT_ID")
-    client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
-    refresh_token = os.environ.get("YOUTUBE_REFRESH_TOKEN")
-
+def get_youtube_service(refresh_token):
     creds = Credentials(
         None,
         refresh_token=refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=client_id,
-        client_secret=client_secret
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET
     )
+    return build("youtube", "v3", credentials=creds)
 
-    youtube = build("youtube", "v3", credentials=creds)
 
-    clean_title = title[:75] if title else "فيديو جديد"
-    full_title = f"{clean_title} #Shorts"
-
-    request_body = {
+def upload_to_youtube(service, video_file, title, description):
+    body = {
         "snippet": {
-            "title": full_title,
-            "description": f"{title}\n\n#Shorts #Viral #Trending",
-            "tags": ["Shorts", "TikTok", "Viral"],
+            "title": title,
+            "description": description,
+            "tags": ["Shorts", "Islamic", "TikTok"],
             "categoryId": "22"
         },
         "status": {
@@ -163,54 +70,59 @@ def upload_to_youtube(video_path, title):
             "selfDeclaredMadeForKids": False
         }
     }
+    media = MediaFileUpload(video_file, chunksize=-1, resumable=True)
+    request = service.videos().insert(part="snippet,status", body=body, media_body=media)
+    response = request.execute()
+    return f"https://youtube.com/shorts/{response['id']}"
 
-    media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
-    request = youtube.videos().insert(
-        part="snippet,status",
-        body=request_body,
-        media_body=media
-    )
 
-    response = None
-    while response is None:
-        status, response = request.next_chunk()
-        if status:
-            print(f"⏳ نسبة الرفع: {int(status.progress() * 100)}%")
+def send_whatsapp_notification(message):
+    if not all([GREEN_API_INSTANCE, GREEN_API_TOKEN, WHATSAPP_PHONE]):
+        print("بيانات Green API غير متوفرة، لن يتم إرسال إشعار.")
+        return
+    url = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE}/sendMessage/{GREEN_API_TOKEN}"
+    payload = {
+        "chatId": f"{WHATSAPP_PHONE}@c.us",
+        "message": message
+    }
+    requests.post(url, json=payload)
 
-    video_id = response.get("id")
-    video_url = f"https://youtube.com/shorts/{video_id}"
-    print(f"✅ تم الرفع بنجاح! الرابط: {video_url}")
-    return video_url
 
 def main():
-    ensure_directories()
+    report = ["🤖 **تقرير النشر اليومي:**\n"]
+    
+    try:
+        # 1. تنزيل الفيديو
+        raw_video = download_tiktok_video(TIKTOK_TARGET)
+        
+        # 2. إضافة العلامة المائية
+        final_video = add_watermark(raw_video)
+        report.append("✅ تم تنزيل الفيديو وتعديله بنجاح.\n")
+        
+        # 3. الرفع على القنوات المحددة
+        for idx, token in enumerate(REFRESH_TOKENS, start=1):
+            if not token:
+                report.append(f"⚠️ القناة {idx}: لم يتم ضبط Refresh Token.")
+                continue
+            
+            try:
+                service = get_youtube_service(token)
+                video_url = upload_to_youtube(
+                    service, 
+                    final_video, 
+                    "مقطع قصير #Shorts", 
+                    "تم النشر تلقائياً بواسطة البوت"
+                )
+                report.append(f"🚀 **القناة {idx}:** {video_url}")
+            except Exception as e:
+                report.append(f"❌ **القناة {idx}:** فشل الرفع ({str(e)})")
 
-    for i in range(VIDEOS_PER_RUN):
-        print(f"\n--- 🎬 بدء العملية رقم {i+1} من أصل {VIDEOS_PER_RUN} ---")
-        try:
-            raw_video_path, title = download_random_short_video()
-            final_video_path = apply_logo_watermark(raw_video_path, logo_path="logo.png")
-            youtube_url = upload_to_youtube(final_video_path, title)
+    except Exception as e:
+        report.append(f"💥 خطأ عام في السكربت: {str(e)}")
 
-            msg = f"🎉 *تم نشر فيديو Shorts جديد بنجاح! ({i+1}/{VIDEOS_PER_RUN})*\n\n📌 *العنوان:* {title}\n🔗 *الرابط:* {youtube_url}"
-            send_whatsapp_message(msg)
+    # 4. إرسال النتيجة إلى الواتساب
+    send_whatsapp_notification("\n".join(report))
 
-            # تنظيف الملفات المؤقتة بعد كل رفع
-            for file in glob.glob(f"{OUTPUT_DIR}/*"):
-                try:
-                    os.remove(file)
-                except Exception:
-                    pass
-
-            # انتظار 10 ثوانٍ بين كل عملية رفع لتفادي الضغط على السيرفر
-            if i < VIDEOS_PER_RUN - 1:
-                print("⏳ انتظار 10 ثوانٍ قبل بدء رفع الفيديو التالي...")
-                time.sleep(10)
-
-        except Exception as e:
-            error_msg = f"❌ *حدث خطأ أثناء تشغيل العملية رقم {i+1}:*\n{str(e)}"
-            print(error_msg)
-            send_whatsapp_message(error_msg)
 
 if __name__ == "__main__":
     main()
