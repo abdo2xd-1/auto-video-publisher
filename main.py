@@ -1,5 +1,6 @@
 import os
 import glob
+import time
 import random
 import subprocess
 import requests
@@ -29,6 +30,7 @@ TARGET_CHANNELS = [
 
 MY_PHONE_NUMBER = "201211615424@c.us"
 OUTPUT_DIR = "final_videos"
+VIDEOS_PER_RUN = 6  # تم التعديل لرفع 6 فيديوهات دفعة واحدة
 
 def ensure_directories():
     if not os.path.exists(OUTPUT_DIR):
@@ -65,10 +67,9 @@ def apply_logo_watermark(input_video_path, logo_path="logo.png"):
         print(f"ℹ️ لم يتم العثور على ملف اللوجو ({logo_path}). سيتم النشر بدون لوجو.")
         return input_video_path
 
-    output_video_path = f"{OUTPUT_DIR}/watermarked_video.mp4"
+    output_video_path = f"{OUTPUT_DIR}/watermarked_{random.randint(1000,9999)}.mp4"
     print("🎨 جاري دمج اللوجو مع الفيديو...")
 
-    # أمر FFmpeg لوضع اللوجو في أعلى اليمين بحجم مناسب
     ffmpeg_cmd = [
         'ffmpeg', '-y',
         '-i', input_video_path,
@@ -87,41 +88,45 @@ def apply_logo_watermark(input_video_path, logo_path="logo.png"):
         return input_video_path
 
 # ==========================================
-# 📥 تنزيل فيديو عشوائي تجنباً لتكرار الفيديو المثبت
+# 📥 تنزيل فيديو قصير أقل من 60 ثانية
 # ==========================================
-def download_random_latest_video():
-    selected_channel = random.choice(TARGET_CHANNELS)
-    # اختيار رقم فيديو عشوائي بين أحدث 1 إلى 10 فيديوهات
-    random_video_index = random.randint(1, 10)
-    
-    print(f"🔍 جاري السحب من الحساب: {selected_channel} (فيديو رقم {random_video_index})")
+def download_random_short_video():
+    max_attempts = 10
+    for attempt in range(max_attempts):
+        selected_channel = random.choice(TARGET_CHANNELS)
+        random_video_index = random.randint(1, 15)
+        
+        print(f"🔍 [محاولة {attempt+1}] جاري السحب من: {selected_channel} (فيديو رقم {random_video_index})")
 
-    ydl_opts = {
-        'outtmpl': f'{OUTPUT_DIR}/downloaded_raw.%(ext)s',
-        'playlist_items': str(random_video_index),
-        'format': 'mp4/bestvideo+bestaudio/best',
-        'overwrites': True,
-        'quiet': False,
-        'no_warnings': True,
-    }
+        ydl_opts = {
+            'outtmpl': f'{OUTPUT_DIR}/downloaded_raw_%(id)s.%(ext)s',
+            'playlist_items': str(random_video_index),
+            'format': 'mp4/bestvideo+bestaudio/best',
+            'match_filter': yt_dlp.utils.match_filter_func('duration <= 60'),
+            'overwrites': True,
+            'quiet': False,
+            'no_warnings': True,
+        }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(selected_channel, download=True)
-            if 'entries' in info and len(info['entries']) > 0:
-                video_info = info['entries'][0]
-            else:
-                video_info = info
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(selected_channel, download=True)
+                if 'entries' in info and len(info['entries']) > 0:
+                    video_info = info['entries'][0]
+                else:
+                    video_info = info
 
-            title = video_info.get('title', 'فيديو جديد')
-            downloaded_files = glob.glob(f"{OUTPUT_DIR}/downloaded_raw.*")
-            
-            if downloaded_files:
-                return downloaded_files[0], title
-    except Exception as e:
-        print(f"⚠️ تعذر التنزيل، جاري المحاولة من حساب آخر: {e}")
-        # محاولة احتياطية من حساب آخر
-        return download_random_latest_video()
+                title = video_info.get('title', 'فيديو جديد')
+                downloaded_files = glob.glob(f"{OUTPUT_DIR}/downloaded_raw_*")
+                
+                if downloaded_files:
+                    return downloaded_files[0], title
+                else:
+                    print("⚠️ الفيديو يتجاوز 60 ثانية، جاري المحاولة مع فيديو آخر...")
+        except Exception as e:
+            print(f"⚠️ تعذر التنزيل: {e}")
+
+    raise Exception("❌ تعذر العثور على فيديو قصير مناسب بعد عدة محاولات.")
 
 # ==========================================
 # 📤 الرفع إلى يوتيوب
@@ -180,25 +185,32 @@ def upload_to_youtube(video_path, title):
 def main():
     ensure_directories()
 
-    try:
-        raw_video_path, title = download_random_latest_video()
-        final_video_path = apply_logo_watermark(raw_video_path, logo_path="logo.png")
-        youtube_url = upload_to_youtube(final_video_path, title)
+    for i in range(VIDEOS_PER_RUN):
+        print(f"\n--- 🎬 بدء العملية رقم {i+1} من أصل {VIDEOS_PER_RUN} ---")
+        try:
+            raw_video_path, title = download_random_short_video()
+            final_video_path = apply_logo_watermark(raw_video_path, logo_path="logo.png")
+            youtube_url = upload_to_youtube(final_video_path, title)
 
-        msg = f"🎉 *تم نشر فيديو جديد بنجاح!*\n\n📌 *العنوان:* {title}\n🔗 *الرابط:* {youtube_url}"
-        send_whatsapp_message(msg)
+            msg = f"🎉 *تم نشر فيديو Shorts جديد بنجاح! ({i+1}/{VIDEOS_PER_RUN})*\n\n📌 *العنوان:* {title}\n🔗 *الرابط:* {youtube_url}"
+            send_whatsapp_message(msg)
 
-        for file in glob.glob(f"{OUTPUT_DIR}/*"):
-            try:
-                os.remove(file)
-            except Exception:
-                pass
+            # تنظيف الملفات المؤقتة بعد كل رفع
+            for file in glob.glob(f"{OUTPUT_DIR}/*"):
+                try:
+                    os.remove(file)
+                except Exception:
+                    pass
 
-    except Exception as e:
-        error_msg = f"❌ *حدث خطأ أثناء تشغيل الأتمتة:*\n{str(e)}"
-        print(error_msg)
-        send_whatsapp_message(error_msg)
-        raise e
+            # انتظار 10 ثوانٍ بين كل عملية رفع لتفادي الضغط على السيرفر
+            if i < VIDEOS_PER_RUN - 1:
+                print("⏳ انتظار 10 ثوانٍ قبل بدء رفع الفيديو التالي...")
+                time.sleep(10)
+
+        except Exception as e:
+            error_msg = f"❌ *حدث خطأ أثناء تشغيل العملية رقم {i+1}:*\n{str(e)}"
+            print(error_msg)
+            send_whatsapp_message(error_msg)
 
 if __name__ == "__main__":
     main()
