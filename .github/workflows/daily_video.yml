@@ -2,8 +2,8 @@ name: Auto Video Publisher
 
 on:
   schedule:
-    - cron: '0 */1 * * *'
-  workflow_dispatch:
+    - cron: '0 */4 * * *' # تشغيل السكريبت كل 4 ساعات تلقائياً (6 مرات يومياً)
+  workflow_dispatch: # إمكانية التشغيل اليدوي
 
 jobs:
   build-and-publish:
