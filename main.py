@@ -8,10 +8,9 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# ================= ================= =================
-# 📌 1. قائمة الحسابات المستهدفة (قرآن + قصص)
-# يمكنك زيادة الحسابات للوصول لـ 100 حساب بسهولة
-# ================= ================= =================
+# ==========================================
+# 📌 قائمة الحسابات (قرآن + قصص)
+# ==========================================
 TARGET_CHANNELS = [
     # --- حسابات قرآن ودينية ---
     "https://www.tiktok.com/@yasser_aldosari",
@@ -22,16 +21,12 @@ TARGET_CHANNELS = [
     "https://www.tiktok.com/@hazza_alblushi",
     "https://www.tiktok.com/@sherif_mostafa",
     "https://www.tiktok.com/@ahmed_alnufais",
-    "https://www.tiktok.com/@abdulbasit_quran",
-    "https://www.tiktok.com/@quran_kareem",
     
     # --- حسابات قصص وترفيه ---
     "https://www.tiktok.com/@fcbarcelona",
     "https://www.tiktok.com/@khaby.lame",
-    "https://www.tiktok.com/@stories_official",
 ]
 
-# رقم الواتساب المربوط بـ Green API
 MY_PHONE_NUMBER = "201211615424@c.us"
 OUTPUT_DIR = "final_videos"
 
@@ -39,9 +34,9 @@ def ensure_directories():
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
-# ================= ================= =================
-# 📱 2. إرسال إشعار الواتساب عبر Green API
-# ================= ================= =================
+# ==========================================
+# 📱 إرسال إشعار الواتساب عبر Green API
+# ==========================================
 def send_whatsapp_message(text):
     id_instance = os.environ.get("GREEN_ID_INSTANCE")
     api_token = os.environ.get("GREEN_API_TOKEN")
@@ -50,7 +45,7 @@ def send_whatsapp_message(text):
         print("⚠️ أسرار Green API غير متوفرة في GitHub Secrets.")
         return
 
-    url = f"https://7107.api.greenapi.com/waInstance{id_instance}/sendMessage/{api_token}"
+    url = f"https://api.green-api.com/waInstance{id_instance}/sendMessage/{api_token}"
     payload = {
         "chatId": MY_PHONE_NUMBER,
         "message": text
@@ -58,16 +53,13 @@ def send_whatsapp_message(text):
 
     try:
         res = requests.post(url, json=payload, timeout=15)
-        if res.status_code == 200:
-            print("📱 تم إرسال إشعار الواتساب بنجاح!")
-        else:
-            print(f"⚠️ تعذر إرسال الواتساب: {res.status_code} - {res.text}")
+        print(f"📱 استجابة الواتساب: {res.status_code} - {res.text}")
     except Exception as e:
         print(f"❌ خطأ أثناء إرسال رسالة الواتساب: {e}")
 
-# ================= ================= =================
-# 🖼️ 3. دالة تركيب اللوجو على الفيديو باستخدام FFmpeg
-# ================= ================= =================
+# ==========================================
+# 🖼️ دالة دمج اللوجو مع الفيديو عبر FFmpeg
+# ==========================================
 def apply_logo_watermark(input_video_path, logo_path="logo.png"):
     if not os.path.exists(logo_path):
         print(f"ℹ️ لم يتم العثور على ملف اللوجو ({logo_path}). سيتم النشر بدون لوجو.")
@@ -76,7 +68,7 @@ def apply_logo_watermark(input_video_path, logo_path="logo.png"):
     output_video_path = f"{OUTPUT_DIR}/watermarked_video.mp4"
     print("🎨 جاري دمج اللوجو مع الفيديو...")
 
-    # أمر FFmpeg لتغيير حجم اللوجو ليكون بعرض 120 بكسل ووضعه في أعلى اليمين مع هامش 20 بكسل
+    # أمر FFmpeg لوضع اللوجو في أعلى اليمين بحجم مناسب
     ffmpeg_cmd = [
         'ffmpeg', '-y',
         '-i', input_video_path,
@@ -94,56 +86,52 @@ def apply_logo_watermark(input_video_path, logo_path="logo.png"):
         print(f"⚠️ فشل وضع اللوجو، سيتم استخدام الفيديو الأصلي: {e}")
         return input_video_path
 
-# ================= ================= =================
-# 📥 4. تنزيل أحدث فيديو من قائمة الحسابات
-# ================= ================= =================
+# ==========================================
+# 📥 تنزيل فيديو عشوائي تجنباً لتكرار الفيديو المثبت
+# ==========================================
 def download_random_latest_video():
-    # اختيار 5 حسابات عشوائية للتجربة حتى نجد فيديو صالح للتنزيل
-    selected_channels = random.sample(TARGET_CHANNELS, min(5, len(TARGET_CHANNELS)))
+    selected_channel = random.choice(TARGET_CHANNELS)
+    # اختيار رقم فيديو عشوائي بين أحدث 1 إلى 10 فيديوهات
+    random_video_index = random.randint(1, 10)
+    
+    print(f"🔍 جاري السحب من الحساب: {selected_channel} (فيديو رقم {random_video_index})")
 
-    for channel_url in selected_channels:
-        print(f"🔍 جاري فحص الحساب: {channel_url}")
-        
-        ydl_opts = {
-            'outtmpl': f'{OUTPUT_DIR}/downloaded_raw.%(ext)s',
-            'playlistend': 1,
-            'format': 'mp4/bestvideo+bestaudio/best',
-            'overwrites': True,
-            'quiet': False,
-            'no_warnings': True,
-        }
+    ydl_opts = {
+        'outtmpl': f'{OUTPUT_DIR}/downloaded_raw.%(ext)s',
+        'playlist_items': str(random_video_index),
+        'format': 'mp4/bestvideo+bestaudio/best',
+        'overwrites': True,
+        'quiet': False,
+        'no_warnings': True,
+    }
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(channel_url, download=True)
-                if 'entries' in info and len(info['entries']) > 0:
-                    video_info = info['entries'][0]
-                else:
-                    video_info = info
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(selected_channel, download=True)
+            if 'entries' in info and len(info['entries']) > 0:
+                video_info = info['entries'][0]
+            else:
+                video_info = info
 
-                title = video_info.get('title', 'فيديو جديد')
-                downloaded_files = glob.glob(f"{OUTPUT_DIR}/downloaded_raw.*")
-                
-                if downloaded_files:
-                    return downloaded_files[0], title
-        except Exception as e:
-            print(f"⚠️ تعذر التنزيل من {channel_url}: {e}")
-            continue
+            title = video_info.get('title', 'فيديو جديد')
+            downloaded_files = glob.glob(f"{OUTPUT_DIR}/downloaded_raw.*")
+            
+            if downloaded_files:
+                return downloaded_files[0], title
+    except Exception as e:
+        print(f"⚠️ تعذر التنزيل، جاري المحاولة من حساب آخر: {e}")
+        # محاولة احتياطية من حساب آخر
+        return download_random_latest_video()
 
-    raise Exception("❌ فشل تنزيل أي فيديو من كافة الحسابات المختارة.")
-
-# ================= ================= =================
-# 📤 5. الرفع إلى يوتيوب شورتس
-# ================= ================= =================
+# ==========================================
+# 📤 الرفع إلى يوتيوب
+# ==========================================
 def upload_to_youtube(video_path, title):
-    print("🚀 جاري بدء رفع الفيديو إلى يوتيوب...")
+    print("🚀 جاري رفع الفيديو إلى يوتيوب...")
 
     client_id = os.environ.get("YOUTUBE_CLIENT_ID")
     client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
     refresh_token = os.environ.get("YOUTUBE_REFRESH_TOKEN")
-
-    if not all([client_id, client_secret, refresh_token]):
-        raise ValueError("❌ أسرار YouTube غير متوفرة في GitHub Secrets!")
 
     creds = Credentials(
         None,
@@ -189,27 +177,17 @@ def upload_to_youtube(video_path, title):
     print(f"✅ تم الرفع بنجاح! الرابط: {video_url}")
     return video_url
 
-# ================= ================= =================
-# 🏁 6. التشغيل الرئيسي
-# ================= ================= =================
 def main():
     ensure_directories()
 
     try:
-        # 1. التنزيل
         raw_video_path, title = download_random_latest_video()
-
-        # 2. إضافة اللوجو
         final_video_path = apply_logo_watermark(raw_video_path, logo_path="logo.png")
-
-        # 3. الرفع
         youtube_url = upload_to_youtube(final_video_path, title)
 
-        # 4. إرسال الإشعار
         msg = f"🎉 *تم نشر فيديو جديد بنجاح!*\n\n📌 *العنوان:* {title}\n🔗 *الرابط:* {youtube_url}"
         send_whatsapp_message(msg)
 
-        # 5. تنظيف الملفات المؤقتة
         for file in glob.glob(f"{OUTPUT_DIR}/*"):
             try:
                 os.remove(file)
