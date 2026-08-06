@@ -32,7 +32,6 @@ MY_PHONE_NUMBER = "201211615424@c.us"
 OUTPUT_DIR = "final_videos"
 POSTED_HISTORY_FILE = "posted_videos.json"
 USER_CHANNELS_FILE = "user_channels.json"
-IG_SESSION_FILE = "ig_session.json"
 
 # ==========================================
 # 💾 إدارة الملفات والبيانات
@@ -221,36 +220,37 @@ def upload_to_youtube(video_path, title):
             res = None
             while res is None:
                 _, res = req.next_chunk()
-            results.append(f"{ch_name}: https://youtube.com/shorts/{res.get('id')}")
+
+            yt_link = f"https://youtube.com/shorts/{res.get('id')}"
+            print(f"✅ تم الرفع بنجاح على {ch_name}: {yt_link}")
+            results.append(f"{ch_name}: {yt_link}")
         except Exception as e:
+            print(f"❌ فشل الرفع على {ch_name}: {e}")
             results.append(f"{ch_name}: فشل الرفع ({e})")
     return results
 
 # ==========================================
-# 🟣 الرفع على انستجرام Reels
+# 🟣 الرفع على انستجرام Reels (باستخدام INSTAGRAM_SESSION)
 # ==========================================
 def upload_to_instagram(video_path, caption):
-    username = os.environ.get("INSTAGRAM_USERNAME")
-    password = os.environ.get("INSTAGRAM_PASSWORD")
-    if not username or not password:
-        return "انستجرام Reels 🟣: غير متوفرة بيانات تسجيل الدخول"
+    session_data = os.environ.get("INSTAGRAM_SESSION")
+    if not session_data:
+        print("⚠️ لم يتم العثور على INSTAGRAM_SESSION في GitHub Secrets.")
+        return "انستجرام Reels 🟣: غير متوفرة بيانات الجلسة (INSTAGRAM_SESSION)"
 
-    print("🚀 جاري الرفع إلى انستجرام Reels...")
+    print("🚀 جاري الرفع إلى انستجرام Reels باستخدام Session...")
     try:
         cl = Client()
-        if os.path.exists(IG_SESSION_FILE):
-            try:
-                cl.load_settings(IG_SESSION_FILE)
-            except Exception as e:
-                print(f"⚠️ تعذر تحميل الجلسة السابقة: {e}")
+        cl.set_user_agent("Instagram 315.0.0.33.109 Android (33/13; 480dpi; 1080x2269; Xiaomi; POCO F3; alioth; qcom; en_US; 560877903)")
 
-        cl.login(username, password)
-        cl.dump_settings(IG_SESSION_FILE)
+        # تحويل نصوص السشن من GitHub Secret إلى Dictionary
+        session_dict = json.loads(session_data)
+        cl.set_settings(session_dict)
 
         clean_caption = f"{caption[:1000]}\n\n#Reels #Shorts #Viral #Trending"
         media = cl.clip_upload(video_path, caption=clean_caption)
         print(f"✅ تم الرفع على انستجرام Reels بنجاح! ID: {media.pk}")
-        return f"انستجرام Reels 🟣: تم النشر بنجاح!"
+        return "انستجرام Reels 🟣: تم النشر بنجاح!"
     except Exception as e:
         print(f"❌ فشل الرفع على انستجرام: {e}")
         return f"انستجرام Reels 🟣: فشل الرفع ({str(e)[:80]})"
