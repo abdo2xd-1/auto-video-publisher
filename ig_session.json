@@ -1,12 +1,1 @@
-from instagrapi import Client
 
-username = "1000oooooooo0001"
-password = "as2qw2df22"
-
-cl = Client()
-print("جاري تسجيل الدخول...")
-cl.login(username, password)
-
-# حفظ بيانات الجلسة في ملف
-cl.dump_settings("ig_session.json")
-print("تم إنشاء ملف ig_session.json بنجاح!")
