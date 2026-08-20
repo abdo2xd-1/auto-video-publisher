@@ -15,7 +15,7 @@ from instagrapi import Client
 # ==========================================
 # 📌 القوائم والملفات الأساسية
 # ==========================================
-TARGET_CHANNELS = [
+DEFAULT_TARGET_CHANNELS = [
     # --- صيانة وإصلاح الأجهزة المنزلية (غسالات، ثلاجات، تكييف، ميكروويف) ---
     "https://www.tiktok.com/@appliancerepairguy",
     "https://www.tiktok.com/@appliancedoctor",
