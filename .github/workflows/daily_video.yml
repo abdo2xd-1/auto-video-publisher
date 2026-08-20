@@ -12,22 +12,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      - name: Install FFmpeg
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -U --pre "yt-dlp[default]"
 
-      - name: Install latest yt-dlp
-  run: |
-    pip install -U --pre "yt-dlp[default]"
       - name: Run main script
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
@@ -36,13 +32,6 @@ jobs:
           YOUTUBE_REFRESH_TOKEN_2: ${{ secrets.YOUTUBE_REFRESH_TOKEN_2 }}
           GREEN_ID_INSTANCE: ${{ secrets.GREEN_ID_INSTANCE }}
           GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
-          INSTAGRAM_SESSION: ${{ secrets.INSTAGRAM_SESSION }}
-        run: python main.py
-
-      - name: Save changes back to repository
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add posted_videos.json user_channels.json || true
-          git commit -m "🤖 Update posted history" || exit 0
+          python main.py
           git push
