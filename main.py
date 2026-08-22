@@ -10,28 +10,22 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# ==========================================
-# 1. قائمة مصادر المحتوى (هاردوير وصيانة أجهزة)
-# ==========================================
-DEFAULT_TARGET_CHANNELS = [
-    # بحث يوتيوب الذكي لضمان جلب فيديوهات جديدة دائماً بدون حظر
-    "ytsearch15:pc hardware repair shorts",
-    "ytsearch15:gpu motherboard repair shorts",
-    "ytsearch15:microsoldering repair shorts",
-    "ytsearch15:appliance repair technician shorts",
-    "ytsearch15:washing machine fix shorts",
-    "ytsearch15:hvac cooling repair shorts",
-    "ytsearch15:electronics teardown and fix shorts",
-    "ytsearch15:laptop motherboard repair shorts",
-    "ytsearch15:smd soldering electronics shorts",
-    "ytsearch15:home appliance electrical fix shorts"
+# ==========================================================
+# 1. مصادر Reddit لصيانة الهاردوير والأجهزة (بدون حظر 100%)
+# ==========================================================
+DEFAULT_TARGET_SOURCES = [
+    "https://www.reddit.com/r/soldering/hot/",
+    "https://www.reddit.com/r/ElectronicsRepair/hot/",
+    "https://www.reddit.com/r/techsupportgore/hot/",
+    "https://www.reddit.com/r/pcmasterrace/hot/",
+    "https://www.reddit.com/r/diyelectronics/hot/"
 ]
 
 HISTORY_FILE = "published_history.txt"
 
-# ==========================================
-# 2. إدارة سجل الفيديوهات المنشورة لمنع التكرار
-# ==========================================
+# ==========================================================
+# 2. إدارة السجل لمنع تكرار الفيديوهات
+# ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
         return set()
@@ -42,28 +36,23 @@ def record_published_video(video_id):
     with open(HISTORY_FILE, "a", encoding="utf-8") as f:
         f.write(f"{video_id}\n")
 
-# ==========================================
-# 3. دالة تحميل الفيديو عبر yt-dlp مع محاكاة الموبايل
-# ==========================================
+# ==========================================================
+# 3. دالة التحميل المباشر
+# ==========================================================
 def download_video(custom_video_url=None):
     os.makedirs("downloads", exist_ok=True)
     published_ids = get_published_history()
 
-    # إعدادات yt-dlp لتجاوز حظر يوتيوب عبر محاكاة عميل Android
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'quiet': True,
+        'quiet': False,
         'no_warnings': True,
         'ignoreerrors': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'ios']
-            }
-        }
+        'extract_flat': False
     }
 
-    sources = [custom_video_url] if custom_video_url else DEFAULT_TARGET_CHANNELS.copy()
+    sources = [custom_video_url] if custom_video_url else DEFAULT_TARGET_SOURCES.copy()
     random.shuffle(sources)
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -71,7 +60,7 @@ def download_video(custom_video_url=None):
             if not source:
                 continue
             try:
-                print(f"🔍 جارٍ فحص المصدر: {source}")
+                print(f"🔍 جارٍ جلب الفيديوهات من: {source}")
                 result = ydl.extract_info(source, download=False)
                 if not result:
                     continue
@@ -80,32 +69,36 @@ def download_video(custom_video_url=None):
                 for entry in entries:
                     if not entry:
                         continue
-                    v_id = entry.get('id')
+                    v_id = str(entry.get('id', ''))
                     duration = entry.get('duration', 0)
+                    webpage_url = entry.get('webpage_url') or entry.get('url')
 
-                    # التأكد من أنه فيديو قصير (أقل من 90 ثانية) وغير مكرر
+                    # التحقق من أن الفيديو مدته أقل من 90 ثانية وغير مكرر
                     if v_id and v_id not in published_ids and (duration is None or duration <= 90):
-                        print(f"📥 تم العثور على فيديو جديد: {entry.get('title')}")
-                        info = ydl.extract_info(f"https://www.youtube.com/watch?v={v_id}", download=True)
+                        title = entry.get('title', 'Hardware Repair & Electronics Tips')
+                        print(f"📥 تم العثور على فيديو جديد: {title}")
+                        
+                        target_url = webpage_url if webpage_url else f"https://www.reddit.com/r/{v_id}"
+                        info = ydl.extract_info(target_url, download=True)
                         filepath = ydl.prepare_filename(info)
                         
-                        # التأكد من الامتداد بعد الدمج
                         if not os.path.exists(filepath):
                             base, _ = os.path.splitext(filepath)
                             filepath = f"{base}.mp4"
 
-                        return filepath, entry.get('title', 'Hardware Repair Tips'), v_id
+                        if os.path.exists(filepath):
+                            print(f"✅ تم تنزيل الفيديو بنجاح إلى: {filepath}")
+                            return filepath, title, v_id
             except Exception as err:
-                print(f"⚠️ خطأ أثناء الفحص: {err}")
+                print(f"⚠️ خطأ أثناء المعالجة: {err}")
                 continue
 
-    # الخروج الآمن دون إيقاف الـ Workflow بخطأ أحمر
-    print("ℹ️ لم يتم العثور على أي فيديو جديد غير مكرر حالياً. إنهاء المهمة بنجاح.")
+    print("ℹ️ لم يتم العثور على فيديوهات جديدة غير مكررة حالياً.")
     sys.exit(0)
 
-# ==========================================
+# ==========================================================
 # 4. النشر على YouTube Shorts
-# ==========================================
+# ==========================================================
 def publish_to_youtube(video_path, title, token_env):
     refresh_token = os.getenv(token_env)
     client_id = os.getenv("YOUTUBE_CLIENT_ID")
@@ -125,12 +118,13 @@ def publish_to_youtube(video_path, title, token_env):
         )
         youtube = build("youtube", "v3", credentials=creds)
 
+        clean_title = (title[:80] + " #Shorts") if len(title) > 80 else (title + " #Shorts")
         body = {
             "snippet": {
-                "title": title[:90] + " #Shorts",
-                "description": f"{title}\n\n#repair #electronics #hardware #shorts",
-                "tags": ["repair", "electronics", "hardware", "soldering", "howto"],
-                "categoryId": "28"  # Science & Technology
+                "title": clean_title,
+                "description": f"{title}\n\n#repair #electronics #hardware #shorts #tech",
+                "tags": ["repair", "electronics", "hardware", "soldering", "tech"],
+                "categoryId": "28"
             },
             "status": {
                 "privacyStatus": "public",
@@ -141,19 +135,19 @@ def publish_to_youtube(video_path, title, token_env):
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
-        print(f"✅ تم النشر على YouTube بنجاح: https://youtu.be/{response.get('id')}")
+        print(f"✅ تم النشر على YouTube Shorts بنجاح! الرابط: https://youtu.be/{response.get('id')}")
     except Exception as e:
-        print(f"❌ خطأ أثناء النشر على YouTube: {e}")
+        print(f"❌ خطأ أثناء الرفع إلى YouTube: {e}")
 
-# ==========================================
+# ==========================================================
 # 5. النشر على Instagram Reels
-# ==========================================
+# ==========================================================
 def publish_to_instagram(video_path, title):
     username = os.getenv("INSTAGRAM_USERNAME")
     password = os.getenv("INSTAGRAM_PASSWORD")
 
     if not username or not password:
-        print("⏩ تخطي النشر على Instagram: بيانات تسجيل الدخول غير متوفرة.")
+        print("⏩ تخطي Instagram: بيانات الحساب غير موجودة.")
         return
 
     try:
@@ -165,7 +159,7 @@ def publish_to_instagram(video_path, title):
     except Exception as e:
         print(f"❌ خطأ أثناء النشر على Instagram: {e}")
 
-# ==========================================
+# ==========================================================
 # 6. إشعارات Green API (WhatsApp)
 # ==========================================
 def send_notification(message):
@@ -182,34 +176,31 @@ def send_notification(message):
     except Exception:
         pass
 
-# ==========================================
-# 7. نقطة الدخول الرئيسية (Main)
-# ==========================================
+# ==========================================================
+# 7. نقطة الدخول الرئيسية
+# ==========================================================
 def main():
     direct_video_url = os.getenv("CUSTOM_VIDEO_URL", None)
     
-    print("🚀 بدء تشغيل أتمتة جلب ونشر الفيديوهات...")
+    print("🚀 بدء تشغيل السكريبت لجلب ونشر الفيديو...")
     raw_video_path, title, video_id = download_video(custom_video_url=direct_video_url)
 
     if raw_video_path and os.path.exists(raw_video_path):
-        print(f"📦 جاري النشر للفيديو: {title}")
+        print(f"📦 بدء نشر الفيديو: {title}")
 
-        # النشر على القنوات المحددة
         publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN")
         publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN_2")
         publish_to_instagram(raw_video_path, title)
 
-        # حفظ المعرف لمنع تكراره مستقبلاً
         record_published_video(video_id)
-        send_notification(f"✅ تم نشر فيديو جديد بنجاح: {title}")
+        send_notification(f"✅ تم نشر فيديو جديد: {title}")
 
-        # تنظيف الملفات المؤقتة
         try:
             os.remove(raw_video_path)
         except OSError:
             pass
 
-        print("🎉 تمت جميع المهام بنجاح!")
+        print("🎉 اكتملت المهمة ونُشر الفيديو بنجاح!")
 
 if __name__ == "__main__":
     main()
