@@ -10,25 +10,40 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================================
-# 1. الكلمات المفتاحية للبحث عن محتوى الصيانة والهاردوير
+# 1. مكتبة روابط فيديوهات صيانة وهاردوير مباشرة (بدون أي حظر)
 # ==========================================================
-SEARCH_KEYWORDS = [
-    "pc hardware repair",
-    "motherboard soldering repair",
-    "gpu repair electronics",
-    "microsoldering fix",
-    "laptop motherboard repair",
-    "appliance repair technician",
-    "electronics circuit repair",
-    "washing machine repair tips",
-    "smd soldering tech"
+DIRECT_HARDWARE_VIDEOS = [
+    {
+        "id": "fix_hw_01",
+        "title": "Computer Hardware & Circuit Repair Tips",
+        "url": "https://assets.mixkit.co/videos/preview/mixkit-circuit-board-of-a-computer-42686-large.mp4"
+    },
+    {
+        "id": "fix_hw_02",
+        "title": "Electronics PCB Soldering and Inspection",
+        "url": "https://assets.mixkit.co/videos/preview/mixkit-hands-of-an-engineer-soldering-a-motherboard-42688-large.mp4"
+    },
+    {
+        "id": "fix_hw_03",
+        "title": "Motherboard Diagnostics and Micro Electronics",
+        "url": "https://assets.mixkit.co/videos/preview/mixkit-close-up-of-circuit-board-components-42684-large.mp4"
+    },
+    {
+        "id": "fix_hw_04",
+        "title": "High Tech Micro Soldering & Wire Connection",
+        "url": "https://assets.mixkit.co/videos/preview/mixkit-technician-soldering-components-on-a-circuit-board-42687-large.mp4"
+    },
+    {
+        "id": "fix_hw_05",
+        "title": "Testing Resistance & Electronic Voltage",
+        "url": "https://assets.mixkit.co/videos/preview/mixkit-man-working-on-a-circuit-board-with-a-soldering-iron-42685-large.mp4"
+    }
 ]
 
 HISTORY_FILE = "published_history.txt"
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
 # ==========================================================
-# 2. إدارة السجل لمنع التكرار
+# 2. إدارة السجل لمنع تكرار الفيديوهات
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -41,68 +56,91 @@ def record_published_video(video_id):
         f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. جلب وتحميل الفيديو بدون علامة مائية وبدون حظر
+# 3. جلب مقاطع الصيانة عبر Pexels API (إن وجد)
+# ==========================================================
+def fetch_pexels_video(published_ids):
+    api_key = os.getenv("PEXELS_API_KEY")
+    if not api_key:
+        return None
+
+    keywords = ["soldering electronics", "pc repair", "motherboard repair", "technician repairing electronics"]
+    query = random.choice(keywords)
+    print(f"🔍 البحث في Pexels API عن: {query}")
+
+    headers = {"Authorization": api_key}
+    url = f"https://api.pexels.com/videos/search?query={query}&orientation=portrait&per_page=15"
+
+    try:
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            videos = data.get("videos", [])
+            for v in videos:
+                v_id = f"pexels_{v.get('id')}"
+                if v_id not in published_ids:
+                    # اختيار أعلى جودة للملف بصيغة HD
+                    video_files = v.get("video_files", [])
+                    best_file = next((f for f in video_files if f.get("quality") == "hd"), video_files[0] if video_files else None)
+                    if best_file:
+                        return {
+                            "id": v_id,
+                            "title": f"Hardware & Electronics Repair - {query.title()}",
+                            "url": best_file.get("link")
+                        }
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء طلب Pexels: {e}")
+
+    return None
+
+# ==========================================================
+# 4. تنزيل الفيديو المباشر
 # ==========================================================
 def download_video():
     os.makedirs("downloads", exist_ok=True)
     published_ids = get_published_history()
 
-    keywords = SEARCH_KEYWORDS.copy()
-    random.shuffle(keywords)
+    # محاولة الجلب من Pexels API أولاً
+    selected_video = fetch_pexels_video(published_ids)
 
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "application/json"
-    }
+    # إذا لم يتوفر Pexels، يتم الاختيار من قائمة الفيديوهات المباشرة
+    if not selected_video:
+        available_pool = [v for v in DIRECT_HARDWARE_VIDEOS if v["id"] not in published_ids]
+        
+        # تصفير السجل في حال استهلاك كافة الفيديوهات المباشرة
+        if not available_pool:
+            print("🔄 تم استهلاك كل المقاطع، جارٍ إعادة تدوير القائمة...")
+            if os.path.exists(HISTORY_FILE):
+                os.remove(HISTORY_FILE)
+            available_pool = DIRECT_HARDWARE_VIDEOS.copy()
 
-    for kw in keywords:
-        print(f"🔍 جارٍ البحث عن فيديوهات لكلمة: '{kw}'...")
-        try:
-            # استخدام سيرفر TikWM للبحث وسحب روابط MP4 المباشرة
-            api_url = "https://www.tikwm.com/api/feed/search"
-            payload = {"keywords": kw, "count": 12, "cursor": 0, "web": 1}
-            
-            res = requests.post(api_url, data=payload, headers=headers, timeout=20)
-            if res.status_code != 200:
-                print(f"⚠️ استجابة غير صالحة من السيرفر ({res.status_code})")
-                continue
+        selected_video = random.choice(available_pool)
 
-            data = res.json()
-            videos = data.get("data", {}).get("videos", [])
+    v_id = selected_video["id"]
+    title = selected_video["title"]
+    download_url = selected_video["url"]
+    filepath = f"downloads/{v_id}.mp4"
 
-            for item in videos:
-                v_id = str(item.get("video_id") or item.get("id"))
-                duration = item.get("duration", 0)
-                download_url = item.get("play") # رابط الفيديو بدون علامة مائية
-                title = item.get("title", "Hardware Repair & Tech Tips")
+    print(f"📥 تم اختيار الفيديو: {title}")
+    print(f"⏳ جارٍ تنزيل ملف الفيديو المباشر...")
 
-                # التحقق من أن الفيديو لم يُنشر مسبقاً ومدته مناسبة للـ Shorts
-                if v_id and v_id not in published_ids and download_url and (duration <= 90):
-                    print(f"📥 تم العثور على فيديو غير مكرر: {title}")
-                    
-                    filepath = f"downloads/{v_id}.mp4"
-                    print(f"⏳ جارٍ تنزيل ملف الفيديو المباشر...")
-                    
-                    with requests.get(download_url, headers=headers, stream=True, timeout=30) as r:
-                        r.raise_for_status()
-                        with open(filepath, 'wb') as f:
-                            for chunk in r.iter_content(chunk_size=1024 * 1024):
-                                if chunk:
-                                    f.write(chunk)
+    headers = {"User-Agent": "Mozilla/5.0"}
+    with requests.get(download_url, headers=headers, stream=True, timeout=30) as r:
+        r.raise_for_status()
+        with open(filepath, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
 
-                    if os.path.exists(filepath) and os.path.getsize(filepath) > 100000:
-                        print(f"✅ تم تحميل الفيديو بنجاح ({round(os.path.getsize(filepath)/(1024*1024), 2)} MB)")
-                        return filepath, title, v_id
+    if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
+        file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 2)
+        print(f"✅ تم تحميل الفيديو بنجاح ({file_size_mb} MB)")
+        return filepath, title, v_id
 
-        except Exception as e:
-            print(f"⚠️ خطأ أثناء البحث عن '{kw}': {e}")
-            continue
-
-    print("ℹ️ تم فحص كافة المصادر ولم يتم العثور على فيديوهات جديدة.")
-    sys.exit(0)
+    print("❌ فشل تنزيل الملف المحدد.")
+    sys.exit(1)
 
 # ==========================================================
-# 4. النشر على YouTube Shorts
+# 5. النشر على YouTube Shorts
 # ==========================================================
 def publish_to_youtube(video_path, title, token_env):
     refresh_token = os.getenv(token_env)
@@ -123,13 +161,11 @@ def publish_to_youtube(video_path, title, token_env):
         )
         youtube = build("youtube", "v3", credentials=creds)
 
-        # تنظيف العنوان وإضافة الهاشتاج
         clean_title = (title[:80] + " #Shorts") if len(title) > 80 else (title + " #Shorts")
-        
         body = {
             "snippet": {
                 "title": clean_title,
-                "description": f"{title}\n\n#repair #electronics #hardware #shorts #tech #soldering",
+                "description": f"{title}\n\n#repair #electronics #hardware #shorts #soldering #tech",
                 "tags": ["repair", "electronics", "hardware", "soldering", "tech", "shorts"],
                 "categoryId": "28"  # Science & Technology
             },
@@ -142,19 +178,19 @@ def publish_to_youtube(video_path, title, token_env):
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
-        print(f"✅ تم الرفع على YouTube بنجاح! الرابط: https://youtu.be/{response.get('id')}")
+        print(f"✅ تم الرفع والنشر على YouTube بنجاح! الرابط: https://youtu.be/{response.get('id')}")
     except Exception as e:
         print(f"❌ خطأ أثناء الرفع إلى YouTube ({token_env}): {e}")
 
 # ==========================================================
-# 5. النشر على Instagram Reels
+# 6. النشر على Instagram Reels
 # ==========================================================
 def publish_to_instagram(video_path, title):
     username = os.getenv("INSTAGRAM_USERNAME")
     password = os.getenv("INSTAGRAM_PASSWORD")
 
     if not username or not password:
-        print("⏩ تخطي Instagram: بيانات الحساب غير موجودة.")
+        print("⏩ تخطي Instagram: بيانات الحساب غير متوفرة.")
         return
 
     try:
@@ -167,7 +203,7 @@ def publish_to_instagram(video_path, title):
         print(f"❌ خطأ أثناء النشر على Instagram: {e}")
 
 # ==========================================================
-# 6. إشعارات Green API (WhatsApp)
+# 7. إشعارات Green API (WhatsApp)
 # ==========================================================
 def send_notification(message):
     id_instance = os.getenv("GREEN_ID_INSTANCE")
@@ -184,16 +220,16 @@ def send_notification(message):
         pass
 
 # ==========================================================
-# 7. نقطة الدخول الرئيسية
+# 8. نقطة الدخول الرئيسية
 # ==========================================================
 def main():
-    print("🚀 بدء تشغيل الأتمتة لجلب ونشر فيديوهات الهاردوير والصيانة...")
+    print("🚀 بدء تشغيل الأتمتة ونشر مقاطع الصيانة...")
     raw_video_path, title, video_id = download_video()
 
     if raw_video_path and os.path.exists(raw_video_path):
-        print(f"📦 بدء نشر الفيديو: {title}")
+        print(f"📦 بدء عملية النشر للفيديو: {title}")
 
-        # الرفع على القنوات
+        # الرفع على قنوات يوتيوب وحساب إنستغرام
         publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN")
         publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN_2")
         publish_to_instagram(raw_video_path, title)
@@ -202,13 +238,13 @@ def main():
         record_published_video(video_id)
         send_notification(f"✅ تم نشر فيديو جديد: {title}")
 
-        # تنظيف الملفات المؤقتة
+        # تنظيف الملف المحمل
         try:
             os.remove(raw_video_path)
         except OSError:
             pass
 
-        print("🎉 اكتملت المهمة ونُشر الفيديو بنجاح!")
+        print("🎉 تمت المهمة ونزل الفيديو بنجاح على القناة!")
 
 if __name__ == "__main__":
     main()
