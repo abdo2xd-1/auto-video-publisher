@@ -10,32 +10,21 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================================
-# 1. قائمة فيديوهات صيانة وهاردوير مباشرة ومضمونة
+# 1. الكلمات المفتاحية للبحث عن محتوى الصيانة والهاردوير
 # ==========================================================
-DIRECT_HARDWARE_VIDEOS = [
-    {
-        "id": "hw_fix_gcs_01",
-        "title": "Computer Hardware & Circuit Diagnostic Tips",
-        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-    },
-    {
-        "id": "hw_fix_gcs_02",
-        "title": "Electronics Soldering & PCB Assembly Demonstration",
-        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
-    },
-    {
-        "id": "hw_fix_gcs_03",
-        "title": "Micro Electronics & Motherboard Repair Guide",
-        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"
-    },
-    {
-        "id": "hw_fix_gcs_04",
-        "title": "High Tech Hardware Component Testing & Fix",
-        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4"
-    }
+SEARCH_TOPICS = [
+    "soldering electronics",
+    "motherboard repair",
+    "circuit board",
+    "pc repair technician",
+    "computer hardware",
+    "micro soldering",
+    "electronics diagnostic",
+    "cpu socket motherboard"
 ]
 
 HISTORY_FILE = "published_history.txt"
+USER_AGENT = "HardwareBot/2.0 (Automated Educational Publisher; contact@example.com)"
 
 # ==========================================================
 # 2. إدارة السجل لمنع تكرار الفيديوهات
@@ -51,104 +40,150 @@ def record_published_video(video_id):
         f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. جلب مقاطع الصيانة عبر Pexels API (إن وجد)
+# 3. المصدر 1: Pexels API (مقاطع Shorts عمودية فائقة الجودة)
 # ==========================================================
-def fetch_pexels_video(published_ids):
+def fetch_from_pexels(published_ids):
     api_key = os.getenv("PEXELS_API_KEY")
     if not api_key:
         return None
 
-    keywords = ["soldering electronics", "motherboard repair", "pc repair technician", "circuit board repair"]
-    query = random.choice(keywords)
-    print(f"🔍 البحث في Pexels API عن: {query}")
-
-    headers = {"Authorization": api_key, "User-Agent": "Mozilla/5.0"}
-    url = f"https://api.pexels.com/videos/search?query={query}&orientation=portrait&per_page=15"
+    topic = random.choice(SEARCH_TOPICS)
+    print(f"🔍 البحث في Pexels API عن: '{topic}'...")
+    url = f"https://api.pexels.com/videos/search?query={topic}&orientation=portrait&per_page=20"
+    headers = {"Authorization": api_key, "User-Agent": USER_AGENT}
 
     try:
         res = requests.get(url, headers=headers, timeout=15)
         if res.status_code == 200:
-            data = res.json()
-            videos = data.get("videos", [])
+            videos = res.json().get("videos", [])
+            random.shuffle(videos)
             for v in videos:
-                v_id = f"pexels_{v.get('id')}"
-                if v_id not in published_ids:
-                    video_files = v.get("video_files", [])
-                    best_file = next((f for f in video_files if f.get("quality") == "hd"), video_files[0] if video_files else None)
-                    if best_file:
+                v_id = f"pex_{v.get('id')}"
+                duration = v.get("duration", 0)
+                if v_id not in published_ids and (duration <= 90):
+                    files = v.get("video_files", [])
+                    # اختيار جودة HD أو SD مناسبة
+                    target_file = next((f for f in files if f.get("quality") == "hd" and f.get("width", 0) < f.get("height", 0)), None)
+                    if not target_file and files:
+                        target_file = files[0]
+
+                    if target_file and target_file.get("link"):
                         return {
                             "id": v_id,
-                            "title": f"Hardware & Electronics Repair - {query.title()}",
-                            "url": best_file.get("link")
+                            "title": f"Professional Hardware Repair - {topic.title()}",
+                            "url": target_file.get("link"),
+                            "headers": {}
                         }
     except Exception as e:
-        print(f"⚠️ تعذر الجلب من Pexels: {e}")
-
+        print(f"⚠️ خطأ أثناء طلب Pexels: {e}")
     return None
 
 # ==========================================================
-# 4. تنزيل الفيديو مع معالجة الأخطاء والتنقل بين الروابط
+# 4. المصدر 2: Internet Archive API (مفتوح بالكامل وبدون حظر)
+# ==========================================================
+def fetch_from_archive_org(published_ids):
+    topic = random.choice(["soldering", "electronics repair", "circuit board", "computer repair", "motherboard"])
+    print(f"🔍 البحث في Internet Archive عن: '{topic}'...")
+
+    search_url = "https://archive.org/advancedsearch.php"
+    params = {
+        "q": f"mediatype:(movies) AND ({topic})",
+        "fl[]": "identifier,title",
+        "sort[]": "downloads desc",
+        "rows": 30,
+        "output": "json"
+    }
+
+    headers = {"User-Agent": USER_AGENT}
+
+    try:
+        res = requests.get(search_url, params=params, headers=headers, timeout=15)
+        if res.status_code == 200:
+            docs = res.json().get("response", {}).get("docs", [])
+            random.shuffle(docs)
+
+            for doc in docs:
+                item_id = doc.get("identifier")
+                if not item_id or item_id in published_ids:
+                    continue
+
+                # جلب ملفات العنصر
+                meta_url = f"https://archive.org/metadata/{item_id}"
+                meta_res = requests.get(meta_url, headers=headers, timeout=10)
+                if meta_res.status_code != 200:
+                    continue
+
+                files = meta_res.json().get("files", [])
+                for f in files:
+                    fname = f.get("name", "")
+                    fmt = f.get("format", "")
+                    size = int(f.get("size", 0) or 0)
+
+                    # اختيار ملف MP4 بحجم مناسب لأجهزة الموبايل (أقل من 40 ميجابايت)
+                    if fname.endswith(".mp4") and (0 < size < 40 * 1024 * 1024):
+                        download_url = f"https://archive.org/download/{item_id}/{fname}"
+                        clean_title = doc.get("title", f"Hardware & Electronics Guide - {topic.title()}")
+                        return {
+                            "id": f"ia_{item_id}",
+                            "title": clean_title,
+                            "url": download_url,
+                            "headers": headers
+                        }
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء طلب Internet Archive: {e}")
+    return None
+
+# ==========================================================
+# 5. تنزيل ملف الفيديو المباشر وحفظه محلياً
 # ==========================================================
 def download_video():
     os.makedirs("downloads", exist_ok=True)
     published_ids = get_published_history()
 
-    # محاولة Pexels API أولاً
-    selected_video = fetch_pexels_video(published_ids)
-    video_pool = []
+    # المحاولة من Pexels ثم Internet Archive
+    video_item = fetch_from_pexels(published_ids)
+    if not video_item:
+        video_item = fetch_from_archive_org(published_ids)
 
-    if selected_video:
-        video_pool.append(selected_video)
+    if not video_item:
+        print("ℹ️ تم فحص كافة المصادر ولم يتم العثور على فيديوهات جديدة غير مكررة.")
+        sys.exit(0)
 
-    available_direct = [v for v in DIRECT_HARDWARE_VIDEOS if v["id"] not in published_ids]
-    if not available_direct:
-        print("🔄 تم استهلاك كل المقاطع، جارٍ إعادة تدوير القائمة...")
-        if os.path.exists(HISTORY_FILE):
-            os.remove(HISTORY_FILE)
-        available_direct = DIRECT_HARDWARE_VIDEOS.copy()
+    v_id = video_item["id"]
+    title = video_item["title"]
+    download_url = video_item["url"]
+    req_headers = video_item.get("headers", {"User-Agent": USER_AGENT})
 
-    random.shuffle(available_direct)
-    video_pool.extend(available_direct)
+    filepath = f"downloads/{v_id}.mp4"
+    print(f"📥 تم اختيار الفيديو: {title}")
+    print(f"⏳ جارٍ التحميل المباشر من المصدر...")
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Referer": "https://google.com"
-    }
+    try:
+        with requests.get(download_url, headers=req_headers, stream=True, timeout=45) as r:
+            if r.status_code != 200:
+                print(f"❌ فشل التحميل بكود الحالة: {r.status_code}")
+                sys.exit(1)
 
-    for item in video_pool:
-        v_id = item["id"]
-        title = item["title"]
-        download_url = item["url"]
-        filepath = f"downloads/{v_id}.mp4"
+            with open(filepath, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
 
-        print(f"📥 تجربة تحميل الفيديو: {title}")
-        try:
-            with requests.get(download_url, headers=headers, stream=True, timeout=30) as r:
-                if r.status_code != 200:
-                    print(f"⚠️ فشل التحميل من الرابط (Status {r.status_code})، تجربة رابط بديل...")
-                    continue
-                
-                with open(filepath, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            f.write(chunk)
+        if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
+            file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 2)
+            print(f"✅ تم تحميل الفيديو بنجاح ({file_size_mb} MB)")
+            return filepath, title, v_id
+    except Exception as err:
+        print(f"❌ خطأ أثناء التنزيل: {err}")
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        sys.exit(1)
 
-            if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
-                file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 2)
-                print(f"✅ تم تحميل الفيديو بنجاح ({file_size_mb} MB)")
-                return filepath, title, v_id
-
-        except Exception as err:
-            print(f"⚠️ خطأ أثناء تحميل {title}: {err}")
-            if os.path.exists(filepath):
-                os.remove(filepath)
-            continue
-
-    print("❌ تعذر تحميل أي فيديو من كافة المصادر المتاحة.")
+    print("❌ تعذر حفظ ملف الفيديو.")
     sys.exit(1)
 
 # ==========================================================
-# 5. النشر على YouTube Shorts
+# 6. النشر على YouTube Shorts
 # ==========================================================
 def publish_to_youtube(video_path, title, token_env):
     refresh_token = os.getenv(token_env)
@@ -186,12 +221,12 @@ def publish_to_youtube(video_path, title, token_env):
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
-        print(f"✅ تم النشر على YouTube بنجاح! الرابط: https://youtu.be/{response.get('id')}")
+        print(f"✅ تم الرفع على YouTube بنجاح! الرابط: https://youtu.be/{response.get('id')}")
     except Exception as e:
         print(f"❌ خطأ أثناء الرفع إلى YouTube ({token_env}): {e}")
 
 # ==========================================================
-# 6. النشر على Instagram Reels
+# 7. النشر على Instagram Reels
 # ==========================================================
 def publish_to_instagram(video_path, title):
     username = os.getenv("INSTAGRAM_USERNAME")
@@ -211,8 +246,8 @@ def publish_to_instagram(video_path, title):
         print(f"❌ خطأ أثناء النشر على Instagram: {e}")
 
 # ==========================================================
-# 7. إشعارات Green API (WhatsApp)
-# ==========================================================
+# 8. إشعارات Green API (WhatsApp)
+# ==========================================
 def send_notification(message):
     id_instance = os.getenv("GREEN_ID_INSTANCE")
     api_token = os.getenv("GREEN_API_TOKEN")
@@ -228,16 +263,16 @@ def send_notification(message):
         pass
 
 # ==========================================================
-# 8. نقطة الدخول الرئيسية
+# 9. نقطة الدخول الرئيسية
 # ==========================================================
 def main():
-    print("🚀 بدء تشغيل الأتمتة ونشر مقاطع الصيانة...")
+    print("🚀 بدء تشغيل الأتمتة وجلب فيديوهات الهاردوير والصيانة...")
     raw_video_path, title, video_id = download_video()
 
     if raw_video_path and os.path.exists(raw_video_path):
         print(f"📦 بدء عملية النشر للفيديو: {title}")
 
-        # الرفع على قنوات يوتيوب وإنستغرام
+        # الرفع والنشر
         publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN")
         publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN_2")
         publish_to_instagram(raw_video_path, title)
@@ -246,13 +281,13 @@ def main():
         record_published_video(video_id)
         send_notification(f"✅ تم نشر فيديو جديد: {title}")
 
-        # تنظيف الملف
+        # تنظيف الملف المحمل
         try:
             os.remove(raw_video_path)
         except OSError:
             pass
 
-        print("🎉 تمت المهمة ونزل الفيديو بنجاح على القناة!")
+        print("🎉 تمت جميع المهام بنجاح ونُشر الفيديو على قناتك!")
 
 if __name__ == "__main__":
     main()
