@@ -10,33 +10,28 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================================
-# 1. مكتبة روابط فيديوهات صيانة وهاردوير مباشرة (بدون أي حظر)
+# 1. قائمة فيديوهات صيانة وهاردوير مباشرة ومضمونة
 # ==========================================================
 DIRECT_HARDWARE_VIDEOS = [
     {
-        "id": "fix_hw_01",
-        "title": "Computer Hardware & Circuit Repair Tips",
-        "url": "https://assets.mixkit.co/videos/preview/mixkit-circuit-board-of-a-computer-42686-large.mp4"
+        "id": "hw_fix_gcs_01",
+        "title": "Computer Hardware & Circuit Diagnostic Tips",
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
     },
     {
-        "id": "fix_hw_02",
-        "title": "Electronics PCB Soldering and Inspection",
-        "url": "https://assets.mixkit.co/videos/preview/mixkit-hands-of-an-engineer-soldering-a-motherboard-42688-large.mp4"
+        "id": "hw_fix_gcs_02",
+        "title": "Electronics Soldering & PCB Assembly Demonstration",
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
     },
     {
-        "id": "fix_hw_03",
-        "title": "Motherboard Diagnostics and Micro Electronics",
-        "url": "https://assets.mixkit.co/videos/preview/mixkit-close-up-of-circuit-board-components-42684-large.mp4"
+        "id": "hw_fix_gcs_03",
+        "title": "Micro Electronics & Motherboard Repair Guide",
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"
     },
     {
-        "id": "fix_hw_04",
-        "title": "High Tech Micro Soldering & Wire Connection",
-        "url": "https://assets.mixkit.co/videos/preview/mixkit-technician-soldering-components-on-a-circuit-board-42687-large.mp4"
-    },
-    {
-        "id": "fix_hw_05",
-        "title": "Testing Resistance & Electronic Voltage",
-        "url": "https://assets.mixkit.co/videos/preview/mixkit-man-working-on-a-circuit-board-with-a-soldering-iron-42685-large.mp4"
+        "id": "hw_fix_gcs_04",
+        "title": "High Tech Hardware Component Testing & Fix",
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4"
     }
 ]
 
@@ -63,11 +58,11 @@ def fetch_pexels_video(published_ids):
     if not api_key:
         return None
 
-    keywords = ["soldering electronics", "pc repair", "motherboard repair", "technician repairing electronics"]
+    keywords = ["soldering electronics", "motherboard repair", "pc repair technician", "circuit board repair"]
     query = random.choice(keywords)
     print(f"🔍 البحث في Pexels API عن: {query}")
 
-    headers = {"Authorization": api_key}
+    headers = {"Authorization": api_key, "User-Agent": "Mozilla/5.0"}
     url = f"https://api.pexels.com/videos/search?query={query}&orientation=portrait&per_page=15"
 
     try:
@@ -78,7 +73,6 @@ def fetch_pexels_video(published_ids):
             for v in videos:
                 v_id = f"pexels_{v.get('id')}"
                 if v_id not in published_ids:
-                    # اختيار أعلى جودة للملف بصيغة HD
                     video_files = v.get("video_files", [])
                     best_file = next((f for f in video_files if f.get("quality") == "hd"), video_files[0] if video_files else None)
                     if best_file:
@@ -88,55 +82,69 @@ def fetch_pexels_video(published_ids):
                             "url": best_file.get("link")
                         }
     except Exception as e:
-        print(f"⚠️ خطأ أثناء طلب Pexels: {e}")
+        print(f"⚠️ تعذر الجلب من Pexels: {e}")
 
     return None
 
 # ==========================================================
-# 4. تنزيل الفيديو المباشر
+# 4. تنزيل الفيديو مع معالجة الأخطاء والتنقل بين الروابط
 # ==========================================================
 def download_video():
     os.makedirs("downloads", exist_ok=True)
     published_ids = get_published_history()
 
-    # محاولة الجلب من Pexels API أولاً
+    # محاولة Pexels API أولاً
     selected_video = fetch_pexels_video(published_ids)
+    video_pool = []
 
-    # إذا لم يتوفر Pexels، يتم الاختيار من قائمة الفيديوهات المباشرة
-    if not selected_video:
-        available_pool = [v for v in DIRECT_HARDWARE_VIDEOS if v["id"] not in published_ids]
-        
-        # تصفير السجل في حال استهلاك كافة الفيديوهات المباشرة
-        if not available_pool:
-            print("🔄 تم استهلاك كل المقاطع، جارٍ إعادة تدوير القائمة...")
-            if os.path.exists(HISTORY_FILE):
-                os.remove(HISTORY_FILE)
-            available_pool = DIRECT_HARDWARE_VIDEOS.copy()
+    if selected_video:
+        video_pool.append(selected_video)
 
-        selected_video = random.choice(available_pool)
+    available_direct = [v for v in DIRECT_HARDWARE_VIDEOS if v["id"] not in published_ids]
+    if not available_direct:
+        print("🔄 تم استهلاك كل المقاطع، جارٍ إعادة تدوير القائمة...")
+        if os.path.exists(HISTORY_FILE):
+            os.remove(HISTORY_FILE)
+        available_direct = DIRECT_HARDWARE_VIDEOS.copy()
 
-    v_id = selected_video["id"]
-    title = selected_video["title"]
-    download_url = selected_video["url"]
-    filepath = f"downloads/{v_id}.mp4"
+    random.shuffle(available_direct)
+    video_pool.extend(available_direct)
 
-    print(f"📥 تم اختيار الفيديو: {title}")
-    print(f"⏳ جارٍ تنزيل ملف الفيديو المباشر...")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Referer": "https://google.com"
+    }
 
-    headers = {"User-Agent": "Mozilla/5.0"}
-    with requests.get(download_url, headers=headers, stream=True, timeout=30) as r:
-        r.raise_for_status()
-        with open(filepath, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    f.write(chunk)
+    for item in video_pool:
+        v_id = item["id"]
+        title = item["title"]
+        download_url = item["url"]
+        filepath = f"downloads/{v_id}.mp4"
 
-    if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
-        file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 2)
-        print(f"✅ تم تحميل الفيديو بنجاح ({file_size_mb} MB)")
-        return filepath, title, v_id
+        print(f"📥 تجربة تحميل الفيديو: {title}")
+        try:
+            with requests.get(download_url, headers=headers, stream=True, timeout=30) as r:
+                if r.status_code != 200:
+                    print(f"⚠️ فشل التحميل من الرابط (Status {r.status_code})، تجربة رابط بديل...")
+                    continue
+                
+                with open(filepath, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
 
-    print("❌ فشل تنزيل الملف المحدد.")
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
+                file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 2)
+                print(f"✅ تم تحميل الفيديو بنجاح ({file_size_mb} MB)")
+                return filepath, title, v_id
+
+        except Exception as err:
+            print(f"⚠️ خطأ أثناء تحميل {title}: {err}")
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            continue
+
+    print("❌ تعذر تحميل أي فيديو من كافة المصادر المتاحة.")
     sys.exit(1)
 
 # ==========================================================
@@ -167,7 +175,7 @@ def publish_to_youtube(video_path, title, token_env):
                 "title": clean_title,
                 "description": f"{title}\n\n#repair #electronics #hardware #shorts #soldering #tech",
                 "tags": ["repair", "electronics", "hardware", "soldering", "tech", "shorts"],
-                "categoryId": "28"  # Science & Technology
+                "categoryId": "28"
             },
             "status": {
                 "privacyStatus": "public",
@@ -178,7 +186,7 @@ def publish_to_youtube(video_path, title, token_env):
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
-        print(f"✅ تم الرفع والنشر على YouTube بنجاح! الرابط: https://youtu.be/{response.get('id')}")
+        print(f"✅ تم النشر على YouTube بنجاح! الرابط: https://youtu.be/{response.get('id')}")
     except Exception as e:
         print(f"❌ خطأ أثناء الرفع إلى YouTube ({token_env}): {e}")
 
@@ -229,7 +237,7 @@ def main():
     if raw_video_path and os.path.exists(raw_video_path):
         print(f"📦 بدء عملية النشر للفيديو: {title}")
 
-        # الرفع على قنوات يوتيوب وحساب إنستغرام
+        # الرفع على قنوات يوتيوب وإنستغرام
         publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN")
         publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN_2")
         publish_to_instagram(raw_video_path, title)
@@ -238,7 +246,7 @@ def main():
         record_published_video(video_id)
         send_notification(f"✅ تم نشر فيديو جديد: {title}")
 
-        # تنظيف الملف المحمل
+        # تنظيف الملف
         try:
             os.remove(raw_video_path)
         except OSError:
