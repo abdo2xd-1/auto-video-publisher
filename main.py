@@ -11,20 +11,22 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================================
-# 1. مصادر Reddit لصيانة الهاردوير والأجهزة (بدون حظر 100%)
+# 1. المجتمعات المستهدفة (صيانة هاردوير وإلكترونيات ولحام)
 # ==========================================================
-DEFAULT_TARGET_SOURCES = [
-    "https://www.reddit.com/r/soldering/hot/",
-    "https://www.reddit.com/r/ElectronicsRepair/hot/",
-    "https://www.reddit.com/r/techsupportgore/hot/",
-    "https://www.reddit.com/r/pcmasterrace/hot/",
-    "https://www.reddit.com/r/diyelectronics/hot/"
+SUBREDDITS = [
+    "soldering",
+    "ElectronicsRepair",
+    "techsupportgore",
+    "pcmasterrace",
+    "diyelectronics",
+    "specializedtools"
 ]
 
 HISTORY_FILE = "published_history.txt"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
 # ==========================================================
-# 2. إدارة السجل لمنع تكرار الفيديوهات
+# 2. إدارة سجل الفيديوهات المنشورة لمنع التكرار
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -37,64 +39,91 @@ def record_published_video(video_id):
         f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. دالة التحميل المباشر
+# 3. جلب وتنزيل الفيديوهات عبر Reddit API مباشرة
 # ==========================================================
 def download_video(custom_video_url=None):
     os.makedirs("downloads", exist_ok=True)
     published_ids = get_published_history()
 
+    # في حال تمرير رابط مباشر
+    if custom_video_url:
+        return download_direct_url(custom_video_url)
+
+    random_subs = SUBREDDITS.copy()
+    random.shuffle(random_subs)
+
+    headers = {"User-Agent": USER_AGENT}
+
+    for sub in random_subs:
+        api_url = f"https://www.reddit.com/r/{sub}/hot.json?limit=30"
+        print(f"🔍 جارٍ فحص مجتمع: r/{sub}")
+        
+        try:
+            res = requests.get(api_url, headers=headers, timeout=15)
+            if res.status_code != 200:
+                print(f"⚠️ فشل الاتصال بـ r/{sub} (Status: {res.status_code})")
+                continue
+
+            data = res.json()
+            posts = data.get("data", {}).get("children", [])
+
+            for post in posts:
+                p_data = post.get("data", {})
+                post_id = p_data.get("id")
+                is_video = p_data.get("is_video", False)
+                title = p_data.get("title", "Hardware Repair & Tech Tips")
+                permalink = p_data.get("permalink")
+
+                # التحقق من أن المنشور يحتوي على فيديو ولم يتم نشره مسبقاً
+                if is_video and post_id not in published_ids and permalink:
+                    media_data = p_data.get("media", {}).get("reddit_video", {})
+                    duration = media_data.get("duration", 0)
+
+                    # شروط الفيديو القصير (أقل من 90 ثانية)
+                    if duration and duration > 90:
+                        continue
+
+                    full_post_url = f"https://www.reddit.com{permalink}"
+                    print(f"📥 تم العثور على فيديو جديد: {title}")
+
+                    # تنزيل الفيديو المدمج بالصوت عبر yt-dlp برأس متصفح حقيقي
+                    ydl_opts = {
+                        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                        'outtmpl': f'downloads/{post_id}.%(ext)s',
+                        'quiet': True,
+                        'no_warnings': True,
+                        'http_headers': {'User-Agent': USER_AGENT}
+                    }
+
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([full_post_url])
+
+                    # التحقق من وجود الملف المحمل
+                    for ext in ["mp4", "mkv", "webm"]:
+                        candidate = f"downloads/{post_id}.{ext}"
+                        if os.path.exists(candidate):
+                            print(f"✅ تم تنزيل الفيديو بنجاح: {candidate}")
+                            return candidate, title, post_id
+
+        except Exception as e:
+            print(f"⚠️ خطأ أثناء قراءة r/{sub}: {e}")
+            continue
+
+    print("ℹ️ تم فحص كافة المصادر ولم يتم العثور على فيديوهات جديدة غير مكررة.")
+    sys.exit(0)
+
+def download_direct_url(url):
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'quiet': False,
+        'quiet': True,
         'no_warnings': True,
-        'ignoreerrors': True,
-        'extract_flat': False
+        'http_headers': {'User-Agent': USER_AGENT}
     }
-
-    sources = [custom_video_url] if custom_video_url else DEFAULT_TARGET_SOURCES.copy()
-    random.shuffle(sources)
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        for source in sources:
-            if not source:
-                continue
-            try:
-                print(f"🔍 جارٍ جلب الفيديوهات من: {source}")
-                result = ydl.extract_info(source, download=False)
-                if not result:
-                    continue
-
-                entries = result.get('entries', [result]) if 'entries' in result else [result]
-                for entry in entries:
-                    if not entry:
-                        continue
-                    v_id = str(entry.get('id', ''))
-                    duration = entry.get('duration', 0)
-                    webpage_url = entry.get('webpage_url') or entry.get('url')
-
-                    # التحقق من أن الفيديو مدته أقل من 90 ثانية وغير مكرر
-                    if v_id and v_id not in published_ids and (duration is None or duration <= 90):
-                        title = entry.get('title', 'Hardware Repair & Electronics Tips')
-                        print(f"📥 تم العثور على فيديو جديد: {title}")
-                        
-                        target_url = webpage_url if webpage_url else f"https://www.reddit.com/r/{v_id}"
-                        info = ydl.extract_info(target_url, download=True)
-                        filepath = ydl.prepare_filename(info)
-                        
-                        if not os.path.exists(filepath):
-                            base, _ = os.path.splitext(filepath)
-                            filepath = f"{base}.mp4"
-
-                        if os.path.exists(filepath):
-                            print(f"✅ تم تنزيل الفيديو بنجاح إلى: {filepath}")
-                            return filepath, title, v_id
-            except Exception as err:
-                print(f"⚠️ خطأ أثناء المعالجة: {err}")
-                continue
-
-    print("ℹ️ لم يتم العثور على فيديوهات جديدة غير مكررة حالياً.")
-    sys.exit(0)
+        info = ydl.extract_info(url, download=True)
+        filepath = ydl.prepare_filename(info)
+        return filepath, info.get('title', 'Repair Tips'), info.get('id')
 
 # ==========================================================
 # 4. النشر على YouTube Shorts
@@ -118,11 +147,11 @@ def publish_to_youtube(video_path, title, token_env):
         )
         youtube = build("youtube", "v3", credentials=creds)
 
-        clean_title = (title[:80] + " #Shorts") if len(title) > 80 else (title + " #Shorts")
+        clean_title = (title[:85] + " #Shorts") if len(title) > 85 else (title + " #Shorts")
         body = {
             "snippet": {
                 "title": clean_title,
-                "description": f"{title}\n\n#repair #electronics #hardware #shorts #tech",
+                "description": f"{title}\n\n#repair #electronics #hardware #shorts #soldering",
                 "tags": ["repair", "electronics", "hardware", "soldering", "tech"],
                 "categoryId": "28"
             },
@@ -135,7 +164,7 @@ def publish_to_youtube(video_path, title, token_env):
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
-        print(f"✅ تم النشر على YouTube Shorts بنجاح! الرابط: https://youtu.be/{response.get('id')}")
+        print(f"✅ تم الرفع والنشر على YouTube Shorts بنجاح! الرابط: https://youtu.be/{response.get('id')}")
     except Exception as e:
         print(f"❌ خطأ أثناء الرفع إلى YouTube: {e}")
 
@@ -161,7 +190,7 @@ def publish_to_instagram(video_path, title):
 
 # ==========================================================
 # 6. إشعارات Green API (WhatsApp)
-# ==========================================
+# ==========================================================
 def send_notification(message):
     id_instance = os.getenv("GREEN_ID_INSTANCE")
     api_token = os.getenv("GREEN_API_TOKEN")
@@ -200,7 +229,7 @@ def main():
         except OSError:
             pass
 
-        print("🎉 اكتملت المهمة ونُشر الفيديو بنجاح!")
+        print("🎉 تمت كل العمليات ونُشر الفيديو بنجاح على قناتك!")
 
 if __name__ == "__main__":
     main()
