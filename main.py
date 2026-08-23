@@ -46,7 +46,7 @@ def record_published_video(video_id):
         f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. تنزيل ملف الفيديو المباشر
+# 3. تنزيل ملف الفيديو
 # ==========================================================
 def download_video():
     os.makedirs("downloads", exist_ok=True)
@@ -94,26 +94,38 @@ def download_video():
     sys.exit(1)
 
 # ==========================================================
-# 4. الرفع والنشر على YouTube Shorts (مع تنظيف التوكن)
+# 4. الرفع على YouTube Shorts عبر Access Token مباشر
 # ==========================================================
-def publish_to_youtube(video_path, title, token_env):
-    refresh_token = (os.getenv(token_env) or "").strip()
+def publish_to_youtube(video_path, title):
+    refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
     client_id = (os.getenv("YOUTUBE_CLIENT_ID") or "").strip()
     client_secret = (os.getenv("YOUTUBE_CLIENT_SECRET") or "").strip()
 
-    if not refresh_token or not client_id or not client_secret:
-        print(f"⏩ تخطي النشر على YouTube ({token_env}): البيانات غير مكتملة.")
+    if not all([refresh_token, client_id, client_secret]):
+        print("⏩ تخطي النشر على YouTube: المتغيرات غير مكتملة.")
         return
 
+    # طلب استبدال Refresh Token بـ Access Token مباشر
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
+    }
+
+    token_res = requests.post(token_url, data=payload)
+    token_data = token_res.json()
+
+    if "access_token" not in token_data:
+        print(f"❌ فشل تجديد التوكن من Google: {token_data}")
+        return
+
+    access_token = token_data["access_token"]
+    print("🔑 تم استخراج Access Token بنجاح من Google!")
+
     try:
-        creds = Credentials(
-            token=None,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=["https://www.googleapis.com/auth/youtube.upload"]
-        )
+        creds = Credentials(token=access_token)
         youtube = build("youtube", "v3", credentials=creds)
 
         body = {
@@ -134,27 +146,10 @@ def publish_to_youtube(video_path, title, token_env):
         response = request.execute()
         print(f"✅ تم الرفع على YouTube Shorts بنجاح! الرابط: https://youtu.be/{response.get('id')}")
     except Exception as e:
-        print(f"❌ خطأ أثناء الرفع إلى YouTube ({token_env}): {e}")
+        print(f"❌ خطأ أثناء رفع الفيديو: {e}")
 
 # ==========================================================
-# 5. إشعارات Green API (WhatsApp)
-# ==========================================================
-def send_notification(message):
-    id_instance = (os.getenv("GREEN_ID_INSTANCE") or "").strip()
-    api_token = (os.getenv("GREEN_API_TOKEN") or "").strip()
-
-    if not id_instance or not api_token:
-        return
-
-    try:
-        url = f"https://api.green-api.com/waInstance{id_instance}/sendMessage/{api_token}"
-        payload = {"chatId": "status@broadcast", "message": message}
-        requests.post(url, json=payload, timeout=10)
-    except Exception:
-        pass
-
-# ==========================================================
-# 6. نقطة الدخول الرئيسية
+# 5. نقطة الدخول الرئيسية
 # ==========================================================
 def main():
     print("🚀 بدء تشغيل الأتمتة ونشر مقاطع الصيانة...")
@@ -162,18 +157,15 @@ def main():
 
     if raw_video_path and os.path.exists(raw_video_path):
         print(f"📦 بدء نشر الفيديو: {title}")
-
-        publish_to_youtube(raw_video_path, title, "YOUTUBE_REFRESH_TOKEN")
-
+        publish_to_youtube(raw_video_path, title)
         record_published_video(video_id)
-        send_notification(f"✅ تم نشر فيديو جديد: {title}")
 
         try:
             os.remove(raw_video_path)
         except OSError:
             pass
 
-        print("🎉 تمت الأتمتة بنجاح وظهر الفيديو على القناة!")
+        print("🎉 تمت المهمة!")
 
 if __name__ == "__main__":
     main()
