@@ -59,56 +59,13 @@ CHANNELS = [
 ]
 
 HISTORY_FILE = "published_history.txt"
-COOKIES_FILE = "cookies.txt"
 history_lock = threading.Lock()
 quota_exceeded_flag = False
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # ==========================================================
-# 2. إعادة بناء وتنسيق ملف الكوكيز بصيغة Netscape صالحة 100%
-# ==========================================================
-def setup_cookies():
-    raw_cookies = (os.getenv("YOUTUBE_COOKIES") or "").strip()
-    if not raw_cookies:
-        print("⚠️ تحذير: لم يتم العثور على YOUTUBE_COOKIES في المتغيرات.")
-        return None
-
-    # بناء ملف Netscape قياسي مع علامات Tab حقيقية
-    formatted_lines = [
-        "# Netscape HTTP Cookie File",
-        "# https://curl.se/docs/http-cookies.html",
-        "# This file was automatically normalized by automation",
-        ""
-    ]
-
-    for line in raw_cookies.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        
-        # تقسيم السطر بالفواصل أو المسافات وإعادة تجميعه بـ \t
-        parts = line.split()
-        if len(parts) >= 7:
-            domain = parts[0]
-            flag = parts[1]
-            path = parts[2]
-            secure = parts[3]
-            expiry = parts[4]
-            name = parts[5]
-            value = " ".join(parts[6:])
-            formatted_lines.append(f"{domain}\t{flag}\t{path}\t{secure}\t{expiry}\t{name}\t{value}")
-        else:
-            formatted_lines.append(line)
-
-    with open(COOKIES_FILE, "w", encoding="utf-8") as f:
-        f.write("\n".join(formatted_lines) + "\n")
-
-    print(f"🍪 تم تهيئة ملف الكوكيز بتنسيق Netscape السليم (عدد الأسطر: {len(formatted_lines)}).")
-    return COOKIES_FILE
-
-# ==========================================================
-# 3. إدارة السجل لمنع التكرار
+# 2. إدارة السجل لمنع التكرار
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -122,7 +79,7 @@ def record_published_video(video_id):
             f.write(f"{video_id}\n")
 
 # ==========================================================
-# 4. استخراج Access Token
+# 3. توليد Access Token
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -149,7 +106,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 5. رفع الفيديو إلى YouTube Shorts
+# 4. رفع الفيديو إلى YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -183,14 +140,14 @@ def upload_to_youtube(video_path, title, access_token):
     except Exception as e:
         err_msg = str(e)
         if "quotaExceeded" in err_msg:
-            print("⚠️ تم استهلاك حصة الرفع اليومية المتاحة للـ API.")
+            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API.")
             quota_exceeded_flag = True
         else:
             print(f"❌ خطأ أثناء الرفع ({title}): {e}")
         return False
 
 # ==========================================================
-# 6. استخراج معرفات الفيديوهات من القنوات
+# 5. استخراج معرفات الفيديوهات من صفحات القنوات
 # ==========================================================
 def get_channel_video_ids(channel_url, max_videos=7):
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
@@ -218,34 +175,47 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 7. التنزيل باستخدام ملف الكوكيز المنسق
+# 6. التنزيل السحابي عبر خوادم البدائل (تجاوز حظر يوتيوب 100%)
 # ==========================================================
-def download_video_stream(v_id, output_path, cookie_path):
-    video_url = f"https://www.youtube.com/watch?v={v_id}"
+def download_video_stream(v_id, output_path):
+    invidious_nodes = [
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de",
+        "https://invidious.jing.rocks",
+        "https://yt.artemislena.eu",
+        "https://iv.ggtyler.dev",
+        "https://invidious.projectsegfau.lt",
+        "https://invidious.private.coffee"
+    ]
 
-    ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': output_path,
-        'quiet': True,
-        'no_warnings': True
-    }
-    if cookie_path and os.path.exists(cookie_path):
-        ydl_opts['cookiefile'] = cookie_path
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-                return True, info.get("title", f"Short {v_id}")
-    except Exception:
-        pass
+    for node in invidious_nodes:
+        try:
+            api_url = f"{node}/api/v1/videos/{v_id}"
+            res = requests.get(api_url, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                title = data.get("title", f"Short {v_id}")
+                formats = data.get("formatStreams", [])
+                if formats:
+                    stream_url = formats[-1].get("url")
+                    if stream_url:
+                        with requests.get(stream_url, stream=True, timeout=30) as r:
+                            if r.status_code == 200:
+                                with open(output_path, 'wb') as f:
+                                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                                        if chunk:
+                                            f.write(chunk)
+                                if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
+                                    return True, title
+        except Exception:
+            continue
 
     return False, None
 
 # ==========================================================
-# 8. معالجة القناة الفردية
+# 7. معالجة القناة الفردية
 # ==========================================================
-def process_channel(channel_url, access_token, published_ids, cookie_path):
+def process_channel(channel_url, access_token, published_ids):
     global quota_exceeded_flag
     if quota_exceeded_flag:
         return
@@ -266,7 +236,7 @@ def process_channel(channel_url, access_token, published_ids, cookie_path):
 
         print(f"📥 [تنزيل مقطع] ({channel_name}) : ID {v_id}...")
         filepath = f"downloads/{v_id}.mp4"
-        success, v_title = download_video_stream(v_id, filepath, cookie_path)
+        success, v_title = download_video_stream(v_id, filepath)
 
         if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
             uploaded = upload_to_youtube(filepath, v_title, access_token)
@@ -280,12 +250,10 @@ def process_channel(channel_url, access_token, published_ids, cookie_path):
                 pass
 
 # ==========================================================
-# 9. نقطة الدخول الرئيسية
+# 8. نقطة الدخول الرئيسية
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص المتوازي ومعالجة 7 مقاطع من كل قناة...")
-    cookie_path = setup_cookies()
-
+    print("🚀 بدء الفحص المتوازي ومعالجة 7 مقاطع من كل قناة عبر السحابة...")
     access_token = get_access_token()
     if not access_token:
         print("❌ لم يتم العثور على Access Token صالح.")
@@ -294,17 +262,13 @@ def main():
     published_ids = get_published_history()
     print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(process_channel, ch, access_token, published_ids, cookie_path) for ch in CHANNELS]
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(process_channel, ch, access_token, published_ids) for ch in CHANNELS]
         for future in as_completed(futures):
             if quota_exceeded_flag:
                 break
-
-    if cookie_path and os.path.exists(cookie_path):
-        os.remove(cookie_path)
 
     print("🎉 اكتملت الدورة بنجاح!")
 
 if __name__ == "__main__":
     main()
-                
