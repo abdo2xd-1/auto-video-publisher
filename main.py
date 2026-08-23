@@ -94,18 +94,19 @@ def download_video():
     sys.exit(1)
 
 # ==========================================================
-# 4. الرفع على YouTube Shorts عبر Access Token مباشر
+# 4. الرفع على YouTube Shorts
 # ==========================================================
 def publish_to_youtube(video_path, title):
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
     client_id = (os.getenv("YOUTUBE_CLIENT_ID") or "").strip()
     client_secret = (os.getenv("YOUTUBE_CLIENT_SECRET") or "").strip()
 
-    if not all([refresh_token, client_id, client_secret]):
-        print("⏩ تخطي النشر على YouTube: المتغيرات غير مكتملة.")
-        return
+    print("--- 🔍 فحص البيانات المستلمة من GitHub Secrets ---")
+    print(f"1. Client ID : الطول={len(client_id)} | يبدأ بـ '{client_id[:10]}' | ينتهي بـ '{client_id[-10:]}'")
+    print(f"2. Secret    : الطول={len(client_secret)} | يبدأ بـ '{client_secret[:6]}' | ينتهي بـ '{client_secret[-6:]}'")
+    print(f"3. Token     : الطول={len(refresh_token)} | يبدأ بـ '{refresh_token[:8]}' | ينتهي بـ '{refresh_token[-8:]}'")
+    print("-------------------------------------------------")
 
-    # طلب استبدال Refresh Token بـ Access Token مباشر
     token_url = "https://oauth2.googleapis.com/token"
     payload = {
         "client_id": client_id,
@@ -118,11 +119,11 @@ def publish_to_youtube(video_path, title):
     token_data = token_res.json()
 
     if "access_token" not in token_data:
-        print(f"❌ فشل تجديد التوكن من Google: {token_data}")
+        print(f"❌ رد Google بالخطأ: {token_data}")
         return
 
     access_token = token_data["access_token"]
-    print("🔑 تم استخراج Access Token بنجاح من Google!")
+    print("🔑 تم التحقق من Google وتوليد Access Token بنجاح!")
 
     try:
         creds = Credentials(token=access_token)
