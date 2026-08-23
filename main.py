@@ -11,116 +11,63 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================================
-# 1. قائمة الـ 100 قناة
+# 1. قائمة القنوات المختارة والمحققة
 # ==========================================================
 CHANNELS = [
-    # القنوات المحددة
-    "https://www.youtube.com/@Engineer-M-Z/shorts",
-    "https://www.youtube.com/@drmakerr/shorts",
-    "https://www.youtube.com/@ahmedamrembabi97/shorts",
-    "https://www.youtube.com/@Saba7oKorah/shorts",
-    "https://www.youtube.com/@erza3ma3serry/shorts",
-    "https://www.youtube.com/@santarama3gharib/shorts",
-    "https://www.youtube.com/@KoraStation/shorts",
+    # القنوات المحددة من قبلك
+    "https://www.youtube.com/@Engineer-M-Z",
+    "https://www.youtube.com/@drmakerr",
+    "https://www.youtube.com/@ahmedamrembabi97",
+    "https://www.youtube.com/@Saba7oKorah",
+    "https://www.youtube.com/@erza3ma3serry",
+    "https://www.youtube.com/@santarama3gharib",
+    "https://www.youtube.com/@KoraStation",
 
     # قنوات صيانة الهواتف والمايكروسولدرينغ
-    "https://www.youtube.com/@PhoneRepairGuru/shorts",
-    "https://www.youtube.com/@HughJeffreys/shorts",
-    "https://www.youtube.com/@iPadRehab/shorts",
-    "https://www.youtube.com/@JerryRigEverything/shorts",
-    "https://www.youtube.com/@StrangeParts/shorts",
-    "https://www.youtube.com/@TheArtofRepair/shorts",
-    "https://www.youtube.com/@STSTelecom/shorts",
-    "https://www.youtube.com/@VCCBoardRepair/shorts",
-    "https://www.youtube.com/@RewaTechnology/shorts",
-    "https://www.youtube.com/@QianLiToolPlus/shorts",
-    "https://www.youtube.com/@iFixitYourself/shorts",
-    "https://www.youtube.com/@JesseCruzRepair/shorts",
-    "https://www.youtube.com/@MobileRepairingOnline/shorts",
-    "https://www.youtube.com/@FixitFixitFixit/shorts",
-    "https://www.youtube.com/@ThePhoneLab/shorts",
-    "https://www.youtube.com/@MonkeyCapital/shorts",
-    "https://www.youtube.com/@MicrosolderingFR/shorts",
-    "https://www.youtube.com/@PhoneBoardSolutions/shorts",
-    "https://www.youtube.com/@CellPhoneRepairCPR/shorts",
+    "https://www.youtube.com/@PhoneRepairGuru",
+    "https://www.youtube.com/@HughJeffreys",
+    "https://www.youtube.com/@JerryRigEverything",
+    "https://www.youtube.com/@StrangeParts",
+    "https://www.youtube.com/@TheArtofRepair",
+    "https://www.youtube.com/@iFixitYourself",
+    "https://www.youtube.com/@ThePhoneLab",
+    "https://www.youtube.com/@MonkeyCapital",
+    "https://www.youtube.com/@JesseCruz",
 
-    # قنوات صيانة اللابتوب وكروت الشاشة والكمبيوتر
-    "https://www.youtube.com/@NorthridgeFix/shorts",
-    "https://www.youtube.com/@Tronicsfix/shorts",
-    "https://www.youtube.com/@KrisFixGermany/shorts",
-    "https://www.youtube.com/@NorthwestRepair/shorts",
-    "https://www.youtube.com/@rossmanngroup/shorts",
-    "https://www.youtube.com/@ElectronicsRepairSchool/shorts",
-    "https://www.youtube.com/@SalemTechsperts/shorts",
-    "https://www.youtube.com/@GregSalazar/shorts",
-    "https://www.youtube.com/@ActuallyHardcoreOverclocking/shorts",
-    "https://www.youtube.com/@MyMateVINCE/shorts",
-    "https://www.youtube.com/@MendItMark/shorts",
-    "https://www.youtube.com/@AdamantIT/shorts",
-    "https://www.youtube.com/@The8BitGuy/shorts",
-    "https://www.youtube.com/@TechYESCity/shorts",
-    "https://www.youtube.com/@AlexLaptopRepair/shorts",
-    "https://www.youtube.com/@BoardRepairLab/shorts",
-    "https://www.youtube.com/@GPURepairHub/shorts",
-    "https://www.youtube.com/@RetroDogFix/shorts",
-    "https://www.youtube.com/@PCRepairSquad/shorts",
-    "https://www.youtube.com/@MotherboardDiagnostics/shorts",
-    "https://www.youtube.com/@ComputerRepairZone/shorts",
-    "https://www.youtube.com/@ModdingCafe/shorts",
+    # قنوات صيانة اللابتوب، الكمبيوتر، وكروت الشاشة
+    "https://www.youtube.com/@NorthridgeFix",
+    "https://www.youtube.com/@Tronicsfix",
+    "https://www.youtube.com/@KrisFix-Germany",
+    "https://www.youtube.com/@NorthwestRepair",
+    "https://www.youtube.com/@rossmanngroup",
+    "https://www.youtube.com/@ElectronicsRepairSchool",
+    "https://www.youtube.com/@SalemTechsperts",
+    "https://www.youtube.com/@GregSalazar",
+    "https://www.youtube.com/@ActuallyHardcoreOverclocking",
+    "https://www.youtube.com/@MyMateVINCE",
+    "https://www.youtube.com/@MendItMark",
+    "https://www.youtube.com/@AdamantIT",
+    "https://www.youtube.com/@The8BitGuy",
+    "https://www.youtube.com/@TechYESCity",
+    "https://www.youtube.com/@AlexLaptopRepair",
 
-    # قنوات صيانة الأجهزة المنزلية والإلكترونيات والباور
-    "https://www.youtube.com/@LearnElectronicsRepair/shorts",
-    "https://www.youtube.com/@BigCliveDotCom/shorts",
-    "https://www.youtube.com/@EEVblog/shorts",
-    "https://www.youtube.com/@greatscottlab/shorts",
-    "https://www.youtube.com/@RepairClinic/shorts",
-    "https://www.youtube.com/@AppliancePartsPros/shorts",
-    "https://www.youtube.com/@SamuraiApplianceRepair/shorts",
-    "https://www.youtube.com/@TechnologyConnections/shorts",
-    "https://www.youtube.com/@ElectroBOOM/shorts",
-    "https://www.youtube.com/@SDGElectronics/shorts",
-    "https://www.youtube.com/@MrCarlsonsLab/shorts",
-    "https://www.youtube.com/@12voltvids/shorts",
-    "https://www.youtube.com/@norcal715/shorts",
-    "https://www.youtube.com/@JohnWardElectric/shorts",
-    "https://www.youtube.com/@ElectronicClinic/shorts",
-    "https://www.youtube.com/@DavesTVElectronics/shorts",
-    "https://www.youtube.com/@MikesElectricStuff/shorts",
-    "https://www.youtube.com/@TheSignalPath/shorts",
-    "https://www.youtube.com/@AllAboutCircuits/shorts",
-    "https://www.youtube.com/@PowerSupplyRepair/shorts",
-    "https://www.youtube.com/@InverterBoardRepair/shorts",
-    "https://www.youtube.com/@MicrowaveFixer/shorts",
-    "https://www.youtube.com/@CircuitLabFix/shorts",
-
-    # قنوات عربية متخصصة في الصيانة
-    "https://www.youtube.com/@AhmedTahseen/shorts",
-    "https://www.youtube.com/@AliSaberLaptop/shorts",
-    "https://www.youtube.com/@WalidIssaElectronics/shorts",
-    "https://www.youtube.com/@ElectronicsForEveryone/shorts",
-    "https://www.youtube.com/@SmouhaAcademy/shorts",
-    "https://www.youtube.com/@MobileProRepair/shorts",
-    "https://www.youtube.com/@EgyptBoardRepair/shorts",
-    "https://www.youtube.com/@WorldOfElectronicsRepair/shorts",
-    "https://www.youtube.com/@TechHardwareAr/shorts",
-    "https://www.youtube.com/@DoctorHardware/shorts",
-    "https://www.youtube.com/@ElectronicsWorkshop/shorts",
-    "https://www.youtube.com/@HardwareCastle/shorts",
-    "https://www.youtube.com/@SamehLaptopRepair/shorts",
-    "https://www.youtube.com/@ArabElectronics/shorts",
-    "https://www.youtube.com/@TVMaintenanceAr/shorts",
-    "https://www.youtube.com/@ACBoardRepair/shorts",
-    "https://www.youtube.com/@HardwareCafe/shorts",
-    "https://www.youtube.com/@InnovatorElectronics/shorts",
-    "https://www.youtube.com/@ArabHardware/shorts",
-    "https://www.youtube.com/@EasyMobileRepair/shorts",
-    "https://www.youtube.com/@BoardFixArabic/shorts",
-    "https://www.youtube.com/@HomeApplianceEng/shorts",
-    "https://www.youtube.com/@LaptopRepairSecrets/shorts",
-    "https://www.youtube.com/@ElectronicsMasteryWay/shorts",
-    "https://www.youtube.com/@MaintenanceExcellenceCenter/shorts",
-    "https://www.youtube.com/@MicroTechAr/shorts",
-    "https://www.youtube.com/@BoardDoctor/shorts"
+    # قنوات صيانة الأجهزة المنزلية والباور سبلاي
+    "https://www.youtube.com/@LearnElectronicsRepair",
+    "https://www.youtube.com/@BigCliveDotCom",
+    "https://www.youtube.com/@EEVblog",
+    "https://www.youtube.com/@greatscottlab",
+    "https://www.youtube.com/@RepairClinic",
+    "https://www.youtube.com/@AppliancePartsPros",
+    "https://www.youtube.com/@TechnologyConnections",
+    "https://www.youtube.com/@ElectroBOOM",
+    "https://www.youtube.com/@SDGElectronics",
+    "https://www.youtube.com/@MrCarlsonsLab",
+    "https://www.youtube.com/@12voltvids",
+    "https://www.youtube.com/@norcal715",
+    "https://www.youtube.com/@JohnWardElectric",
+    "https://www.youtube.com/@MikeElectricStuff",
+    "https://www.youtube.com/@TheSignalPath",
+    "https://www.youtube.com/@AllAboutCircuits"
 ]
 
 HISTORY_FILE = "published_history.txt"
@@ -142,7 +89,7 @@ def record_published_video(video_id):
             f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. استخراج Access Token
+# 3. توليد Access Token
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -163,14 +110,13 @@ def get_access_token():
 
     try:
         res = requests.post(token_url, data=payload, timeout=15)
-        data = res.json()
-        return data.get("access_token")
+        return res.json().get("access_token")
     except Exception as e:
         print(f"❌ تعذر الاتصال بـ Google OAuth: {e}")
         return None
 
 # ==========================================================
-# 4. رفع الفيديو إلى YouTube Shorts
+# 4. الرفع على YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -185,8 +131,8 @@ def upload_to_youtube(video_path, title, access_token):
         body = {
             "snippet": {
                 "title": clean_title,
-                "description": f"{title}\n\n#Shorts #Tech #Repair #Hardware #Electronics #Viral",
-                "tags": ["Shorts", "Tech", "Repair", "Hardware", "Electronics", "Viral"],
+                "description": f"{title}\n\n#Shorts #Tech #Repair #Hardware #Electronics",
+                "tags": ["Shorts", "Tech", "Repair", "Hardware", "Electronics"],
                 "categoryId": "28"
             },
             "status": {
@@ -211,7 +157,7 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 5. معالجة القناة وسحب 7 فيديوهات
+# 5. معالجة القناة وتخطي حماية YouTube Datacenter Block
 # ==========================================================
 def process_channel(channel_url, access_token, published_ids):
     global quota_exceeded_flag
@@ -219,20 +165,36 @@ def process_channel(channel_url, access_token, published_ids):
         return
 
     os.makedirs("downloads", exist_ok=True)
-    channel_name = channel_url.split('/')[3]
+    channel_name = channel_url.split('/')[-1]
 
+    # إعدادات متقدمة لمحاكاة هواتف Android وتجاوز كشف البوتات
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'playlist_items': '1-7',  # سحب أول 7 فيديوهات من القناة
+        'playlist_items': '1-7',
         'quiet': True,
         'no_warnings': True,
-        'ignoreerrors': True
+        'ignoreerrors': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios'],
+                'player_skip': ['webpage', 'configs']
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
     }
 
     try:
+        # البحث في صفحة الفيديوهات القصيرة أو العامة للقناة
+        target_url = f"{channel_url}/shorts"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(channel_url, download=False)
+            info = ydl.extract_info(target_url, download=False)
+            if not info or not info.get('entries'):
+                info = ydl.extract_info(f"{channel_url}/videos", download=False)
+
             if not info:
                 return
 
@@ -248,21 +210,19 @@ def process_channel(channel_url, access_token, published_ids):
                     continue
 
                 v_id = entry.get('id')
-                v_title = entry.get('title', 'Hardware & Repair Shorts')
+                v_title = entry.get('title', 'Hardware Shorts')
                 v_url = entry.get('webpage_url') or f"https://www.youtube.com/watch?v={v_id}"
 
-                # تخطي الفيديو إذا تم نشره مسبقاً
                 if not v_id or v_id in published_ids:
                     continue
 
-                print(f"📥 [تحميل] ({channel_name}) : {v_title[:45]}...")
+                print(f"📥 [تنزيل] ({channel_name}) : {v_title[:45]}...")
                 try:
                     ydl.download([v_url])
                 except Exception as dl_err:
-                    print(f"⚠️ فشل تنزيل المقطع: {dl_err}")
+                    print(f"⚠️ تخطي الفيديو بسبب قيود التحميل: {dl_err}")
                     continue
 
-                # البحث عن الملف المحمّل
                 downloaded_file = None
                 for ext in ['mp4', 'webm', 'mkv']:
                     candidate = f"downloads/{v_id}.{ext}"
@@ -282,29 +242,28 @@ def process_channel(channel_url, access_token, published_ids):
                         pass
 
     except Exception as e:
-        print(f"⚠️ تنبيه في قناة {channel_url}: {e}")
+        print(f"⚠️ تنبيه أثناء فحص {channel_name}: {e}")
 
 # ==========================================================
-# 6. نقطة الدخول والتشغيل المتوازي
+# 6. التشغيل المتوازي
 # ==========================================================
 def main():
-    print("🚀 بدء فحص الـ 100 قناة ومعالجة 7 مقاطع من كل قناة...")
+    print("🚀 بدء الفحص الذكي وتنزيل ونشر 7 مقاطع بالتوازي...")
     access_token = get_access_token()
     if not access_token:
-        print("❌ لم يتم العثور على Access Token صالح.")
+        print("❌ تعذر متابعة النشر بسبب عدم توفر التوكن.")
         sys.exit(1)
 
     published_ids = get_published_history()
     print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
 
-    # معالجة 5 قنوات بالتوازي في نفس اللحظة
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(process_channel, ch, access_token, published_ids) for ch in CHANNELS]
         for future in as_completed(futures):
             if quota_exceeded_flag:
                 break
 
-    print("🎉 انتهت دورة العمل لهذه الفترة.")
+    print("🎉 انتهت دورة النشر بنجاح!")
 
 if __name__ == "__main__":
     main()
