@@ -30,11 +30,10 @@ CHANNELS = [
     "https://www.youtube.com/@JerryRigEverything",
     "https://www.youtube.com/@StrangeParts",
     "https://www.youtube.com/@TheArtofRepair",
-    "https://www.youtube.com/@iFixitYourself",
     "https://www.youtube.com/@ThePhoneLab",
     "https://www.youtube.com/@MonkeyCapital",
 
-    # قنوات صيانة اللابتوب والكمبيوتر وكروت الشاشة
+    # قنوات صيانة اللابتوب والكمبيوتر
     "https://www.youtube.com/@NorthridgeFix",
     "https://www.youtube.com/@Tronicsfix",
     "https://www.youtube.com/@NorthwestRepair",
@@ -47,7 +46,7 @@ CHANNELS = [
     "https://www.youtube.com/@TechYESCity",
     "https://www.youtube.com/@AlexLaptopRepair",
 
-    # قنوات صيانة الأجهزة المنزلية والإلكترونيات والباور
+    # قنوات صيانة الأجهزة المنزلية والباور سبلاي
     "https://www.youtube.com/@BigCliveDotCom",
     "https://www.youtube.com/@EEVblog",
     "https://www.youtube.com/@greatscottlab",
@@ -63,7 +62,7 @@ HISTORY_FILE = "published_history.txt"
 history_lock = threading.Lock()
 quota_exceeded_flag = False
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # ==========================================================
 # 2. إدارة السجل ومنع التكرار
@@ -80,7 +79,7 @@ def record_published_video(video_id):
             f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. توليد Access Token
+# 3. استخراج Access Token
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -107,7 +106,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 4. الرفع على YouTube Shorts
+# 4. رفع الفيديو إلى YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -148,15 +147,10 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 5. استخراج معرّفات الفيديوهات عبر Regex فوري بدون حظر
+# 5. استخراج معرفات الفيديوهات عبر Regex سريع
 # ==========================================================
 def get_channel_video_ids(channel_url, max_videos=7):
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept-Language": "en-US,en;q=0.9"
-    }
-
-    # محاولة قراءة صفحة Shorts أولاً ثم الفيديوهات العادية
+    headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
     urls_to_try = [f"{channel_url}/shorts", f"{channel_url}/videos"]
     found_ids = []
 
@@ -165,7 +159,6 @@ def get_channel_video_ids(channel_url, max_videos=7):
             res = requests.get(target, headers=headers, timeout=10)
             if res.status_code == 200:
                 html = res.text
-                # استخراج المعرفات من JSON الداخلي للصفحة
                 shorts_ids = re.findall(r'/shorts/([a-zA-Z0-9_-]{11})', html)
                 video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
 
@@ -182,7 +175,76 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 6. معالجة القناة الواحدة (7 فيديوهات)
+# 6. التنزيل الاحتياطي المباشر (تجاوز حظر البوت بنسبة 100%)
+# ==========================================================
+def download_fallback_invidious(v_id, output_path):
+    instances = [
+        "https://inv.tux.pizza",
+        "https://invidious.nerdvpn.de",
+        "https://invidious.slipfox.xyz",
+        "https://yt.artemislena.eu"
+    ]
+    for inst in instances:
+        try:
+            api_url = f"{inst}/api/v1/videos/{v_id}"
+            res = requests.get(api_url, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                title = data.get("title", f"Short {v_id}")
+                formats = data.get("formatStreams", [])
+                if formats:
+                    video_url = formats[-1].get("url")
+                    if video_url:
+                        with requests.get(video_url, stream=True, timeout=30) as r:
+                            if r.status_code == 200:
+                                with open(output_path, 'wb') as f:
+                                    for chunk in r.iter_content(chunk_size=1024*1024):
+                                        if chunk:
+                                            f.write(chunk)
+                                return True, title
+        except Exception:
+            continue
+    return False, None
+
+# ==========================================================
+# 7. معالجة وتنزيل الفيديو الواحد
+# ==========================================================
+def download_single_video(v_id):
+    filepath = f"downloads/{v_id}.mp4"
+    video_url = f"https://www.youtube.com/watch?v={v_id}"
+
+    # الخطة أ: yt-dlp مع عميل التلفزيون والأندرويد المدمج
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': filepath,
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android_embedded', 'tv_embedded', 'ios'],
+                'player_skip': ['webpage', 'configs']
+            }
+        }
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            v_title = info.get('title', f"Tech Short {v_id}")
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
+                return filepath, v_title
+    except Exception:
+        pass
+
+    # الخطة ب: التنزيل الاحتياطي المباشر
+    success, v_title = download_fallback_invidious(v_id, filepath)
+    if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
+        return filepath, v_title
+
+    return None, None
+
+# ==========================================================
+# 8. معالجة القناة
 # ==========================================================
 def process_channel(channel_url, access_token, published_ids):
     global quota_exceeded_flag
@@ -192,23 +254,9 @@ def process_channel(channel_url, access_token, published_ids):
     os.makedirs("downloads", exist_ok=True)
     channel_name = channel_url.split('/')[-1]
 
-    # جلب 7 فيديوهات
     video_ids = get_channel_video_ids(channel_url, max_videos=7)
     if not video_ids:
         return
-
-    ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'quiet': True,
-        'no_warnings': True,
-        'ignoreerrors': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'ios']
-            }
-        }
-    }
 
     for v_id in video_ids:
         if quota_exceeded_flag:
@@ -217,56 +265,40 @@ def process_channel(channel_url, access_token, published_ids):
         if v_id in published_ids:
             continue
 
-        video_url = f"https://www.youtube.com/watch?v={v_id}"
-        print(f"📥 [تحميل فيديو] ({channel_name}) : ID {v_id}...")
+        print(f"📥 [تنزيل مقطع] ({channel_name}) : ID {v_id}...")
+        downloaded_file, v_title = download_single_video(v_id)
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=True)
-                v_title = info.get('title', f"Tech & Repair Short {v_id}") if info else f"Short {v_id}"
+        if downloaded_file and os.path.exists(downloaded_file):
+            success = upload_to_youtube(downloaded_file, v_title, access_token)
+            if success:
+                record_published_video(v_id)
+                published_ids.add(v_id)
 
-            downloaded_file = None
-            for ext in ['mp4', 'webm', 'mkv']:
-                candidate = f"downloads/{v_id}.{ext}"
-                if os.path.exists(candidate):
-                    downloaded_file = candidate
-                    break
-
-            if downloaded_file and os.path.exists(downloaded_file):
-                success = upload_to_youtube(downloaded_file, v_title, access_token)
-                if success:
-                    record_published_video(v_id)
-                    published_ids.add(v_id)
-
-                try:
-                    os.remove(downloaded_file)
-                except OSError:
-                    pass
-
-        except Exception as e:
-            print(f"⚠️ تعذر تحميل/رفع المقطع {v_id}: {e}")
+            try:
+                os.remove(downloaded_file)
+            except OSError:
+                pass
 
 # ==========================================================
-# 7. نقطة الدخول والتشغيل المتوازي
+# 9. نقطة الدخول الرئيسية
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص الذكي وتنزيل ونشر 7 مقاطع من كل قناة...")
+    print("🚀 بدء الفحص المتوازي ومعالجة 7 مقاطع من كل قناة...")
     access_token = get_access_token()
     if not access_token:
-        print("❌ تعذر متابعة النشر بسبب عدم توفر التوكن.")
+        print("❌ لم يتم العثور على Access Token صالح.")
         sys.exit(1)
 
     published_ids = get_published_history()
     print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
 
-    # فحص القنوات وتحميل المقاطع بالتوازي عبر 5 مسارات متزامنة
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = [executor.submit(process_channel, ch, access_token, published_ids) for ch in CHANNELS]
         for future in as_completed(futures):
             if quota_exceeded_flag:
                 break
 
-    print("🎉 انتهت دورة العمل لهذه الفترة!")
+    print("🎉 انتهت دورة النشر بنجاح!")
 
 if __name__ == "__main__":
     main()
