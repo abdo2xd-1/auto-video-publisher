@@ -15,7 +15,7 @@ from googleapiclient.http import MediaFileUpload
 # 1. قائمة القنوات المستهدفة
 # ==========================================================
 CHANNELS = [
-    # القنوات المحددة من قبلك
+    # القنوات المحددة
     "https://www.youtube.com/@Engineer-M-Z",
     "https://www.youtube.com/@drmakerr",
     "https://www.youtube.com/@ahmedamrembabi97",
@@ -66,14 +66,16 @@ quota_exceeded_flag = False
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # ==========================================================
-# 2. تهيئة ملف الـ Cookies
+# 2. إعداد ملف الكوكيز
 # ==========================================================
 def setup_cookies():
-    raw_cookies = os.getenv("YOUTUBE_COOKIES", "").strip()
+    raw_cookies = (os.getenv("YOUTUBE_COOKIES") or "").strip()
     if raw_cookies:
         with open(COOKIES_FILE, "w", encoding="utf-8") as f:
             f.write(raw_cookies)
+        print(f"🍪 تم تفعيل ملف الكوكيز بنجاح (الحجم: {len(raw_cookies)} حرف).")
         return COOKIES_FILE
+    print("⚠️ تحذير: لم يتم العثور على YOUTUBE_COOKIES في المتغيرات.")
     return None
 
 # ==========================================================
@@ -91,7 +93,7 @@ def record_published_video(video_id):
             f.write(f"{video_id}\n")
 
 # ==========================================================
-# 4. توليد Access Token
+# 4. استخراج Access Token
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -146,7 +148,7 @@ def upload_to_youtube(video_path, title, access_token):
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
-        print(f"✅ [تم الرفع بنجاح] {clean_title} -> https://youtu.be/{response.get('id')}")
+        print(f"✅ [تم النشر بنجاح] {clean_title} -> https://youtu.be/{response.get('id')}")
         return True
 
     except Exception as e:
@@ -187,59 +189,26 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 7. التنزيل السحابي وتجاوز حظر الـ Bot بنسبة 100%
+# 7. التنزيل باستخدام ملف الكوكيز مباشرة
 # ==========================================================
 def download_video_stream(v_id, output_path, cookie_path):
-    # قائمة خوادم Invidious المفتوحة لتجاوز حظر مراكز بيانات GitHub
-    invidious_nodes = [
-        "https://inv.nadeko.net",
-        "https://invidious.nerdvpn.de",
-        "https://invidious.jing.rocks",
-        "https://yt.artemislena.eu",
-        "https://iv.ggtyler.dev",
-        "https://invidious.projectsegfau.lt",
-        "https://invidious.private.coffee"
-    ]
+    video_url = f"https://www.youtube.com/watch?v={v_id}"
 
-    for node in invidious_nodes:
-        try:
-            api_url = f"{node}/api/v1/videos/{v_id}"
-            res = requests.get(api_url, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                title = data.get("title", f"Short {v_id}")
-                formats = data.get("formatStreams", [])
-                if formats:
-                    stream_url = formats[-1].get("url")
-                    if stream_url:
-                        with requests.get(stream_url, stream=True, timeout=30) as r:
-                            if r.status_code == 200:
-                                with open(output_path, 'wb') as f:
-                                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                                        if chunk:
-                                            f.write(chunk)
-                                if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-                                    return True, title
-        except Exception:
-            continue
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': output_path,
+        'quiet': True,
+        'no_warnings': True
+    }
+    if cookie_path and os.path.exists(cookie_path):
+        ydl_opts['cookiefile'] = cookie_path
 
-    # خطة بديلة عبر yt-dlp مع الـ Cookies
     try:
-        video_url = f"https://www.youtube.com/watch?v={v_id}"
-        ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'outtmpl': output_path,
-            'quiet': True,
-            'no_warnings': True
-        }
-        if cookie_path and os.path.exists(cookie_path):
-            ydl_opts['cookiefile'] = cookie_path
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
             if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
                 return True, info.get("title", f"Short {v_id}")
-    except Exception:
+    except Exception as e:
         pass
 
     return False, None
@@ -296,7 +265,7 @@ def main():
     published_ids = get_published_history()
     print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(process_channel, ch, access_token, published_ids, cookie_path) for ch in CHANNELS]
         for future in as_completed(futures):
             if quota_exceeded_flag:
@@ -305,7 +274,7 @@ def main():
     if cookie_path and os.path.exists(cookie_path):
         os.remove(cookie_path)
 
-    print("🎉 انتهت دورة العمل لهذه الفترة بنجاح!")
+    print("🎉 اكتملت الدورة بنجاح!")
 
 if __name__ == "__main__":
     main()
