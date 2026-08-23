@@ -15,7 +15,7 @@ from googleapiclient.http import MediaFileUpload
 # 1. قائمة القنوات المستهدفة
 # ==========================================================
 CHANNELS = [
-    # القنوات المحددة من قبلك
+    # القنوات المحددة
     "https://www.youtube.com/@Engineer-M-Z",
     "https://www.youtube.com/@drmakerr",
     "https://www.youtube.com/@ahmedamrembabi97",
@@ -106,7 +106,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 4. رفع الفيديو إلى YouTube Shorts
+# 4. الرفع على YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -147,7 +147,7 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 5. استخراج معرفات الفيديوهات عبر Regex سريع
+# 5. استخراج معرفات الفيديوهات من القناة
 # ==========================================================
 def get_channel_video_ids(channel_url, max_videos=7):
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
@@ -175,76 +175,72 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 6. التنزيل الاحتياطي المباشر (تجاوز حظر البوت بنسبة 100%)
+# 6. محرك التنزيل السحابي وتجاوز حظر البوت
 # ==========================================================
-def download_fallback_invidious(v_id, output_path):
-    instances = [
-        "https://inv.tux.pizza",
-        "https://invidious.nerdvpn.de",
-        "https://invidious.slipfox.xyz",
-        "https://yt.artemislena.eu"
+def download_video_stream(v_id, output_path):
+    video_url = f"https://www.youtube.com/watch?v={v_id}"
+
+    # سيرفرات سحب الوسائط الخارجية لتجاوز BotGuard
+    cobalt_servers = [
+        "https://api.cobalt.tools",
+        "https://cobalt-api.kwiatekm.pl",
+        "https://cobalt.xy2401.top",
+        "https://yt.artemislena.eu/api/v1/videos/"
     ]
-    for inst in instances:
+
+    for endpoint in cobalt_servers:
         try:
-            api_url = f"{inst}/api/v1/videos/{v_id}"
-            res = requests.get(api_url, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                title = data.get("title", f"Short {v_id}")
-                formats = data.get("formatStreams", [])
-                if formats:
-                    video_url = formats[-1].get("url")
-                    if video_url:
-                        with requests.get(video_url, stream=True, timeout=30) as r:
+            if "artemislena" in endpoint:
+                res = requests.get(f"{endpoint}{v_id}", timeout=10)
+                if res.status_code == 200:
+                    data = res.json()
+                    formats = data.get("formatStreams", [])
+                    if formats:
+                        dl_url = formats[-1].get("url")
+                        with requests.get(dl_url, stream=True, timeout=30) as r:
                             if r.status_code == 200:
                                 with open(output_path, 'wb') as f:
                                     for chunk in r.iter_content(chunk_size=1024*1024):
                                         if chunk:
                                             f.write(chunk)
-                                return True, title
+                                return True, data.get("title", f"Short {v_id}")
+            else:
+                payload = {"url": video_url, "videoQuality": "720"}
+                headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": USER_AGENT}
+                res = requests.post(endpoint, headers=headers, json=payload, timeout=12)
+                if res.status_code == 200:
+                    data = res.json()
+                    dl_url = data.get("url")
+                    if dl_url:
+                        with requests.get(dl_url, stream=True, timeout=30) as r:
+                            if r.status_code == 200:
+                                with open(output_path, 'wb') as f:
+                                    for chunk in r.iter_content(chunk_size=1024*1024):
+                                        if chunk:
+                                            f.write(chunk)
+                                return True, f"Hardware & Tech Short {v_id}"
         except Exception:
             continue
-    return False, None
 
-# ==========================================================
-# 7. معالجة وتنزيل الفيديو الواحد
-# ==========================================================
-def download_single_video(v_id):
-    filepath = f"downloads/{v_id}.mp4"
-    video_url = f"https://www.youtube.com/watch?v={v_id}"
-
-    # الخطة أ: yt-dlp مع عميل التلفزيون والأندرويد المدمج
-    ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': filepath,
-        'quiet': True,
-        'no_warnings': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android_embedded', 'tv_embedded', 'ios'],
-                'player_skip': ['webpage', 'configs']
-            }
-        }
-    }
-
+    # محاولة بديلة عبر yt-dlp مع عميل Web Creator
     try:
+        ydl_opts = {
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'outtmpl': output_path,
+            'quiet': True,
+            'no_warnings': True,
+            'extractor_args': {'youtube': {'player_client': ['web_creator', 'mweb']}}
+        }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
-            v_title = info.get('title', f"Tech Short {v_id}")
-            if os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
-                return filepath, v_title
+            return True, info.get("title", f"Short {v_id}")
     except Exception:
         pass
 
-    # الخطة ب: التنزيل الاحتياطي المباشر
-    success, v_title = download_fallback_invidious(v_id, filepath)
-    if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
-        return filepath, v_title
-
-    return None, None
+    return False, None
 
 # ==========================================================
-# 8. معالجة القناة
+# 7. معالجة القناة الواحدة
 # ==========================================================
 def process_channel(channel_url, access_token, published_ids):
     global quota_exceeded_flag
@@ -265,25 +261,26 @@ def process_channel(channel_url, access_token, published_ids):
         if v_id in published_ids:
             continue
 
-        print(f"📥 [تنزيل مقطع] ({channel_name}) : ID {v_id}...")
-        downloaded_file, v_title = download_single_video(v_id)
+        print(f"📥 [بدء معالجة مقطع] ({channel_name}) : ID {v_id}...")
+        filepath = f"downloads/{v_id}.mp4"
+        success, v_title = download_video_stream(v_id, filepath)
 
-        if downloaded_file and os.path.exists(downloaded_file):
-            success = upload_to_youtube(downloaded_file, v_title, access_token)
-            if success:
+        if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
+            uploaded = upload_to_youtube(filepath, v_title, access_token)
+            if uploaded:
                 record_published_video(v_id)
                 published_ids.add(v_id)
 
             try:
-                os.remove(downloaded_file)
+                os.remove(filepath)
             except OSError:
                 pass
 
 # ==========================================================
-# 9. نقطة الدخول الرئيسية
+# 8. نقطة الدخول والتشغيل المتوازي
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص المتوازي ومعالجة 7 مقاطع من كل قناة...")
+    print("🚀 بدء الفحص الشامل وتنزيل ونشر 7 مقاطع بالتوازي...")
     access_token = get_access_token()
     if not access_token:
         print("❌ لم يتم العثور على Access Token صالح.")
@@ -298,7 +295,7 @@ def main():
             if quota_exceeded_flag:
                 break
 
-    print("🎉 انتهت دورة النشر بنجاح!")
+    print("🎉 انتهت دورة العمل لهذه الفترة بنجاح!")
 
 if __name__ == "__main__":
     main()
