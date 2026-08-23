@@ -15,7 +15,7 @@ from googleapiclient.http import MediaFileUpload
 # 1. قائمة القنوات المستهدفة
 # ==========================================================
 CHANNELS = [
-    # القنوات المحددة
+    # القنوات المحددة من قبلك
     "https://www.youtube.com/@Engineer-M-Z",
     "https://www.youtube.com/@drmakerr",
     "https://www.youtube.com/@ahmedamrembabi97",
@@ -66,17 +66,46 @@ quota_exceeded_flag = False
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # ==========================================================
-# 2. إعداد ملف الكوكيز
+# 2. إعادة بناء وتنسيق ملف الكوكيز بصيغة Netscape صالحة 100%
 # ==========================================================
 def setup_cookies():
     raw_cookies = (os.getenv("YOUTUBE_COOKIES") or "").strip()
-    if raw_cookies:
-        with open(COOKIES_FILE, "w", encoding="utf-8") as f:
-            f.write(raw_cookies)
-        print(f"🍪 تم تفعيل ملف الكوكيز بنجاح (الحجم: {len(raw_cookies)} حرف).")
-        return COOKIES_FILE
-    print("⚠️ تحذير: لم يتم العثور على YOUTUBE_COOKIES في المتغيرات.")
-    return None
+    if not raw_cookies:
+        print("⚠️ تحذير: لم يتم العثور على YOUTUBE_COOKIES في المتغيرات.")
+        return None
+
+    # بناء ملف Netscape قياسي مع علامات Tab حقيقية
+    formatted_lines = [
+        "# Netscape HTTP Cookie File",
+        "# https://curl.se/docs/http-cookies.html",
+        "# This file was automatically normalized by automation",
+        ""
+    ]
+
+    for line in raw_cookies.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        
+        # تقسيم السطر بالفواصل أو المسافات وإعادة تجميعه بـ \t
+        parts = line.split()
+        if len(parts) >= 7:
+            domain = parts[0]
+            flag = parts[1]
+            path = parts[2]
+            secure = parts[3]
+            expiry = parts[4]
+            name = parts[5]
+            value = " ".join(parts[6:])
+            formatted_lines.append(f"{domain}\t{flag}\t{path}\t{secure}\t{expiry}\t{name}\t{value}")
+        else:
+            formatted_lines.append(line)
+
+    with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+        f.write("\n".join(formatted_lines) + "\n")
+
+    print(f"🍪 تم تهيئة ملف الكوكيز بتنسيق Netscape السليم (عدد الأسطر: {len(formatted_lines)}).")
+    return COOKIES_FILE
 
 # ==========================================================
 # 3. إدارة السجل لمنع التكرار
@@ -161,7 +190,7 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 6. استخراج معرفات الفيديوهات من صفحات القنوات
+# 6. استخراج معرفات الفيديوهات من القنوات
 # ==========================================================
 def get_channel_video_ids(channel_url, max_videos=7):
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
@@ -189,7 +218,7 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 7. التنزيل باستخدام ملف الكوكيز مباشرة
+# 7. التنزيل باستخدام ملف الكوكيز المنسق
 # ==========================================================
 def download_video_stream(v_id, output_path, cookie_path):
     video_url = f"https://www.youtube.com/watch?v={v_id}"
@@ -208,7 +237,7 @@ def download_video_stream(v_id, output_path, cookie_path):
             info = ydl.extract_info(video_url, download=True)
             if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
                 return True, info.get("title", f"Short {v_id}")
-    except Exception as e:
+    except Exception:
         pass
 
     return False, None
@@ -278,3 +307,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+                
