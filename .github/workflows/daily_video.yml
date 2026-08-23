@@ -1,39 +1,7 @@
-name: البناء والنشر
-
-on:
-  schedule:
-    - cron: '0 12 * * *' # تشغيل تلقائي يومياً
-  workflow_dispatch:     # إمكانية التشغيل اليدوي
-
-jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install instagrapi
-          pip install -U --pre "yt-dlp[default]"
-
-      - name: Run main script
+- name: Run main script
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          YOUTUBE_REFRESH_TOKEN_2: ${{ secrets.YOUTUBE_REFRESH_TOKEN_2 }}
-          GREEN_ID_INSTANCE: ${{ secrets.GREEN_ID_INSTANCE }}
-          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
-          INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
-          INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
         run: |
           python main.py
