@@ -106,7 +106,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 4. رفع الفيديو إلى YouTube Shorts
+# 4. الرفع على YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -140,14 +140,14 @@ def upload_to_youtube(video_path, title, access_token):
     except Exception as e:
         err_msg = str(e)
         if "quotaExceeded" in err_msg:
-            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API.")
+            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API (Daily Quota Limit Reached).")
             quota_exceeded_flag = True
         else:
             print(f"❌ خطأ أثناء الرفع ({title}): {e}")
         return False
 
 # ==========================================================
-# 5. استخراج معرفات الفيديوهات من صفحات القنوات
+# 5. استخراج معرفات الفيديوهات
 # ==========================================================
 def get_channel_video_ids(channel_url, max_videos=7):
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
@@ -175,40 +175,30 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 6. التنزيل السحابي عبر خوادم البدائل (تجاوز حظر يوتيوب 100%)
+# 6. التنزيل المباشر باستخدام POT Provider
 # ==========================================================
-def download_video_stream(v_id, output_path):
-    invidious_nodes = [
-        "https://inv.nadeko.net",
-        "https://invidious.nerdvpn.de",
-        "https://invidious.jing.rocks",
-        "https://yt.artemislena.eu",
-        "https://iv.ggtyler.dev",
-        "https://invidious.projectsegfau.lt",
-        "https://invidious.private.coffee"
-    ]
+def download_video_direct(v_id, output_path):
+    video_url = f"https://www.youtube.com/watch?v={v_id}"
 
-    for node in invidious_nodes:
-        try:
-            api_url = f"{node}/api/v1/videos/{v_id}"
-            res = requests.get(api_url, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                title = data.get("title", f"Short {v_id}")
-                formats = data.get("formatStreams", [])
-                if formats:
-                    stream_url = formats[-1].get("url")
-                    if stream_url:
-                        with requests.get(stream_url, stream=True, timeout=30) as r:
-                            if r.status_code == 200:
-                                with open(output_path, 'wb') as f:
-                                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                                        if chunk:
-                                            f.write(chunk)
-                                if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-                                    return True, title
-        except Exception:
-            continue
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': output_path,
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {
+            'youtubepot-bgutilhttp': {
+                'base_url': 'http://127.0.0.1:4416'
+            }
+        }
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
+                return True, info.get("title", f"Short {v_id}")
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء التنزيل: {e}")
 
     return False, None
 
@@ -234,9 +224,9 @@ def process_channel(channel_url, access_token, published_ids):
         if v_id in published_ids:
             continue
 
-        print(f"📥 [تنزيل مقطع] ({channel_name}) : ID {v_id}...")
+        print(f"📥 [تنزيل مباشر] ({channel_name}) : ID {v_id}...")
         filepath = f"downloads/{v_id}.mp4"
-        success, v_title = download_video_stream(v_id, filepath)
+        success, v_title = download_video_direct(v_id, filepath)
 
         if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
             uploaded = upload_to_youtube(filepath, v_title, access_token)
@@ -253,16 +243,16 @@ def process_channel(channel_url, access_token, published_ids):
 # 8. نقطة الدخول الرئيسية
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص المتوازي ومعالجة 7 مقاطع من كل قناة عبر السحابة...")
+    print("🚀 بدء الفحص المتوازي والتنزيل والرفع المباشر إلى يوتيوب...")
     access_token = get_access_token()
     if not access_token:
         print("❌ لم يتم العثور على Access Token صالح.")
         sys.exit(1)
 
     published_ids = get_published_history()
-    print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
+    print(f"📊 إجمالي المقاطع المنشورة سابقاً: {len(published_ids)}")
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [executor.submit(process_channel, ch, access_token, published_ids) for ch in CHANNELS]
         for future in as_completed(futures):
             if quota_exceeded_flag:
