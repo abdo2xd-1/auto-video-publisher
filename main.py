@@ -1,6 +1,5 @@
 import os
 import sys
-import re
 import json
 import time
 import threading
@@ -12,43 +11,37 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================================
-# 1. قائمة الـ 20 قناة المختارة بدقة
+# 1. قائمة الـ 20 حساباً المستهدفة على TikTok
 # ==========================================================
-CHANNELS = [
-    # القنوات الـ 7 المحددة
-    "https://www.youtube.com/@Engineer-M-Z",
-    "https://www.youtube.com/@drmakerr",
-    "https://www.youtube.com/@ahmedamrembabi97",
-    "https://www.youtube.com/@Saba7oKorah",
-    "https://www.youtube.com/@erza3ma3serry",
-    "https://www.youtube.com/@santarama3gharib",
-    "https://www.youtube.com/@KoraStation",
+TARGET_ACCOUNTS = [
+    # الحسابات الـ 7 المطلوبة من قبلك
+    {"name": "Engineer M Z", "url": "https://www.tiktok.com/@engineermz"},
+    {"name": "Dr Maker", "url": "https://www.tiktok.com/@drmakerr"},
+    {"name": "Ahmed Amr Embabi", "url": "https://www.tiktok.com/@ahmedamrembabi"},
+    {"name": "Saba7o Korah", "url": "https://www.tiktok.com/@amr.nasoohy"},
+    {"name": "Erza3 Ma3 Serry", "url": "https://www.tiktok.com/@marwanserry"},
+    {"name": "Santaramaghareeb", "url": "https://www.tiktok.com/@santaramaghareeb"},
+    {"name": "Kora Station", "url": "https://www.tiktok.com/@korastation"},
 
-    # قنوات صيانة الهواتف والمايكروسولدرينغ (6 قنوات)
-    "https://www.youtube.com/@PhoneRepairGuru",
-    "https://www.youtube.com/@HughJeffreys",
-    "https://www.youtube.com/@JerryRigEverything",
-    "https://www.youtube.com/@StrangeParts",
-    "https://www.youtube.com/@TheArtofRepair",
-    "https://www.youtube.com/@ThePhoneLab",
-
-    # قنوات صيانة اللابتوب والكمبيوتر (5 قنوات)
-    "https://www.youtube.com/@NorthridgeFix",
-    "https://www.youtube.com/@Tronicsfix",
-    "https://www.youtube.com/@NorthwestRepair",
-    "https://www.youtube.com/@rossmanngroup",
-    "https://www.youtube.com/@SalemTechsperts",
-
-    # قنوات صيانة الأجهزة المنزلية والإلكترونيات (قناتان)
-    "https://www.youtube.com/@BigCliveDotCom",
-    "https://www.youtube.com/@ElectroBOOM"
+    # أفضل 13 حساباً في صيانة الهاردوير والهواتف والكمبيوتر
+    {"name": "Phone Repair Guru", "url": "https://www.tiktok.com/@phonerepairguru"},
+    {"name": "JerryRigEverything", "url": "https://www.tiktok.com/@jerryrigeverything"},
+    {"name": "Hugh Jeffreys", "url": "https://www.tiktok.com/@hughjeffreys"},
+    {"name": "Strange Parts", "url": "https://www.tiktok.com/@strangeparts"},
+    {"name": "The Art of Repair", "url": "https://www.tiktok.com/@theartofrepair"},
+    {"name": "The Phone Lab", "url": "https://www.tiktok.com/@thephonelab"},
+    {"name": "NorthridgeFix", "url": "https://www.tiktok.com/@northridgefix"},
+    {"name": "TronicsFix", "url": "https://www.tiktok.com/@tronicsfix"},
+    {"name": "Northwest Repair", "url": "https://www.tiktok.com/@northwestrepair"},
+    {"name": "Louis Rossmann", "url": "https://www.tiktok.com/@louisrossmann"},
+    {"name": "Salem Techsperts", "url": "https://www.tiktok.com/@salemtechsperts"},
+    {"name": "Big Clive", "url": "https://www.tiktok.com/@bigclivedotcom"},
+    {"name": "ElectroBOOM", "url": "https://www.tiktok.com/@electroboom"}
 ]
 
 HISTORY_FILE = "published_history.txt"
 history_lock = threading.Lock()
 quota_exceeded_flag = False
-
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # ==========================================================
 # 2. إدارة السجل لمنع التكرار
@@ -65,7 +58,7 @@ def record_published_video(video_id):
             f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. توليد Access Token من Google
+# 3. استخراج Access Token من Google OAuth
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -92,7 +85,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 4. رفع الفيديو إلى YouTube Shorts
+# 4. الرفع على YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -103,12 +96,13 @@ def upload_to_youtube(video_path, title, access_token):
         creds = Credentials(token=access_token)
         youtube = build("youtube", "v3", credentials=creds)
 
+        # تجهيز عنوان ووصف متوافق مع Shorts
         clean_title = (title[:85] + " #Shorts") if "#Shorts" not in title else title[:95]
         body = {
             "snippet": {
                 "title": clean_title,
-                "description": f"{title}\n\n#Shorts #Tech #Repair #Hardware #Electronics #Viral",
-                "tags": ["Shorts", "Tech", "Repair", "Hardware", "Electronics", "Viral"],
+                "description": f"{title}\n\n#Shorts #Viral #Trending #Reels #Tech",
+                "tags": ["Shorts", "Viral", "Trending", "Reels", "Tech"],
                 "categoryId": "28"
             },
             "status": {
@@ -126,131 +120,103 @@ def upload_to_youtube(video_path, title, access_token):
     except Exception as e:
         err_msg = str(e)
         if "quotaExceeded" in err_msg:
-            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API.")
+            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API المتاحة لحسابك اليوم.")
             quota_exceeded_flag = True
         else:
             print(f"❌ خطأ أثناء الرفع ({title}): {e}")
         return False
 
 # ==========================================================
-# 5. استخراج معرفات المقاطع من القنوات
+# 5. تنزيل ومعالجة مقاطع الحساب (7 مقاطع لكل حساب)
 # ==========================================================
-def get_channel_video_ids(channel_url, max_videos=7):
-    headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
-    urls_to_try = [f"{channel_url}/shorts", f"{channel_url}/videos"]
-    found_ids = []
-
-    for target in urls_to_try:
-        try:
-            res = requests.get(target, headers=headers, timeout=10)
-            if res.status_code == 200:
-                html = res.text
-                shorts_ids = re.findall(r'/shorts/([a-zA-Z0-9_-]{11})', html)
-                video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
-
-                combined = list(dict.fromkeys(shorts_ids + video_ids))
-                for vid in combined:
-                    if vid not in found_ids:
-                        found_ids.append(vid)
-
-                if len(found_ids) >= max_videos:
-                    break
-        except Exception:
-            continue
-
-    return found_ids[:max_videos]
-
-# ==========================================================
-# 6. التنزيل المباشر باستخدام POT Provider
-# ==========================================================
-def download_video_stream(v_id, output_path):
-    video_url = f"https://www.youtube.com/watch?v={v_id}"
-
-    ydl_opts = {
-        'format': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
-        'outtmpl': output_path,
-        'quiet': True,
-        'no_warnings': True,
-        'extractor_args': {
-            'youtubepot-bgutilhttp': {
-                'base_url': 'http://127.0.0.1:4416'
-            },
-            'youtube': {
-                'player_client': ['mweb', 'web']
-            }
-        }
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-                return True, info.get("title", f"Short {v_id}")
-    except Exception as e:
-        print(f"⚠️ تنبيه تنزيل ({v_id}): {e}")
-
-    return False, None
-
-# ==========================================================
-# 7. معالجة القناة
-# ==========================================================
-def process_channel(channel_url, access_token, published_ids):
+def process_account(account, access_token, published_ids):
     global quota_exceeded_flag
     if quota_exceeded_flag:
         return
 
+    acc_name = account["name"]
+    acc_url = account["url"]
     os.makedirs("downloads", exist_ok=True)
-    channel_name = channel_url.split('/')[-1]
 
-    video_ids = get_channel_video_ids(channel_url, max_videos=7)
-    if not video_ids:
-        return
+    ydl_opts = {
+        'format': 'best[ext=mp4]/best',
+        'outtmpl': 'downloads/%(id)s.%(ext)s',
+        'playlist_items': '1-7',  # سحب أحدث 7 مقاطع
+        'quiet': True,
+        'no_warnings': True,
+        'ignoreerrors': True
+    }
 
-    for v_id in video_ids:
-        if quota_exceeded_flag:
-            break
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            print(f"🔍 [فحص الحساب] {acc_name} ({acc_url})...")
+            info = ydl.extract_info(acc_url, download=False)
+            if not info:
+                return
 
-        if v_id in published_ids:
-            continue
+            entries = info.get('entries', [])
+            if not entries and isinstance(info, dict):
+                entries = [info]
 
-        print(f"📥 [تنزيل مقطع] ({channel_name}) : ID {v_id}...")
-        filepath = f"downloads/{v_id}.mp4"
-        success, v_title = download_video_stream(v_id, filepath)
+            for entry in entries:
+                if quota_exceeded_flag:
+                    break
 
-        if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
-            uploaded = upload_to_youtube(filepath, v_title, access_token)
-            if uploaded:
-                record_published_video(v_id)
-                published_ids.add(v_id)
+                if not entry:
+                    continue
 
-            try:
-                os.remove(filepath)
-            except OSError:
-                pass
+                v_id = entry.get('id')
+                v_title = entry.get('title', f"{acc_name} Video")
+                v_url = entry.get('webpage_url') or entry.get('url') or f"{acc_url}/video/{v_id}"
+
+                if not v_id or v_id in published_ids:
+                    continue
+
+                print(f"📥 [تحميل فيديو جديد] ({acc_name}) : {v_title[:45]}...")
+                try:
+                    ydl.download([v_url])
+                except Exception as dl_err:
+                    print(f"⚠️ تعذر تنزيل المقطع {v_id}: {dl_err}")
+                    continue
+
+                # العثور على الملف المحمل
+                downloaded_file = None
+                for ext in ['mp4', 'webm', 'mkv', 'mov']:
+                    candidate = f"downloads/{v_id}.{ext}"
+                    if os.path.exists(candidate):
+                        downloaded_file = candidate
+                        break
+
+                if downloaded_file and os.path.exists(downloaded_file) and os.path.getsize(downloaded_file) > 10000:
+                    uploaded = upload_to_youtube(downloaded_file, v_title, access_token)
+                    if uploaded:
+                        record_published_video(v_id)
+                        published_ids.add(v_id)
+
+                    try:
+                        os.remove(downloaded_file)
+                    except OSError:
+                        pass
+
+    except Exception as e:
+        print(f"⚠️ تنبيه أثناء معالجة حساب {acc_name}: {e}")
 
 # ==========================================================
-# 8. نقطة الدخول الرئيسية
+# 6. نقطة الدخول والتشغيل المتوازي
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص المتوازي ومعالجة القنوات الـ 20 عبر POT Provider...")
-    
-    # تهيئة أولية لـ yt-dlp لتسجيل الإضافة بأمان ومنع تعارض الخيوط
-    try:
-        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-            pass
-    except Exception:
-        pass
-
+    print("🚀 بدء الفحص الشامل وتنزيل المقاطع من الـ 20 حساباً ونشرها على YouTube Shorts...")
     access_token = get_access_token()
     if not access_token:
         print("❌ لم يتم العثور على Access Token صالح.")
         sys.exit(1)
 
     published_ids = get_published_history()
-    print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
+    print(f"📊 إجمالي المقاطع المنشورة سابقاً في السجل: {len(published_ids)}")
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = [executor.submit(process_channel, ch, access_token, published_ids) for ch in CHANNELS]
+    # معالجة 4 حسابات بالتوازي في نفس اللحظة
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(process_account, acc, access_token, published_ids) for acc in TARGET_ACCOUNTS]
         for future in as_completed(futures):
             if quota_exceeded_flag:
                 break
