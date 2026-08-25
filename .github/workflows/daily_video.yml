@@ -1,9 +1,9 @@
-name: Social Media to YouTube Shorts Automation
+name: Video Automation Every 30 Minutes
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/30 * * * *' # تشغيل تلقائي كل 30 دقيقة
+    - cron: '*/30 * * * *'
 
 permissions:
   contents: write
@@ -36,6 +36,7 @@ jobs:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           python main.py
 
