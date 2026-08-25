@@ -62,7 +62,7 @@ HISTORY_FILE = "published_history.txt"
 history_lock = threading.Lock()
 quota_exceeded_flag = False
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
 
 # ==========================================================
 # 2. إدارة السجل لمنع التكرار
@@ -79,7 +79,7 @@ def record_published_video(video_id):
             f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. توليد Access Token
+# 3. استخراج Access Token
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -106,7 +106,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 4. الرفع على YouTube Shorts
+# 4. رفع الفيديو إلى YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -140,7 +140,7 @@ def upload_to_youtube(video_path, title, access_token):
     except Exception as e:
         err_msg = str(e)
         if "quotaExceeded" in err_msg:
-            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API (Daily Quota Limit Reached).")
+            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API.")
             quota_exceeded_flag = True
         else:
             print(f"❌ خطأ أثناء الرفع ({title}): {e}")
@@ -175,20 +175,23 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 6. التنزيل المباشر باستخدام POT Provider
+# 6. التنزيل عبر محاكي iOS وعميل الويب المباشر
 # ==========================================================
-def download_video_direct(v_id, output_path):
+def download_video_stream(v_id, output_path):
     video_url = f"https://www.youtube.com/watch?v={v_id}"
 
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'format': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
         'outtmpl': output_path,
         'quiet': True,
         'no_warnings': True,
         'extractor_args': {
-            'youtubepot-bgutilhttp': {
-                'base_url': 'http://127.0.0.1:4416'
+            'youtube': {
+                'player_client': ['ios', 'web_creator', 'mweb']
             }
+        },
+        'http_headers': {
+            'User-Agent': USER_AGENT
         }
     }
 
@@ -198,7 +201,7 @@ def download_video_direct(v_id, output_path):
             if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
                 return True, info.get("title", f"Short {v_id}")
     except Exception as e:
-        print(f"⚠️ خطأ أثناء التنزيل: {e}")
+        print(f"⚠️ تنبيه تنزيل ({v_id}): {e}")
 
     return False, None
 
@@ -224,9 +227,9 @@ def process_channel(channel_url, access_token, published_ids):
         if v_id in published_ids:
             continue
 
-        print(f"📥 [تنزيل مباشر] ({channel_name}) : ID {v_id}...")
+        print(f"📥 [تنزيل مقطع] ({channel_name}) : ID {v_id}...")
         filepath = f"downloads/{v_id}.mp4"
-        success, v_title = download_video_direct(v_id, filepath)
+        success, v_title = download_video_stream(v_id, filepath)
 
         if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
             uploaded = upload_to_youtube(filepath, v_title, access_token)
@@ -243,14 +246,14 @@ def process_channel(channel_url, access_token, published_ids):
 # 8. نقطة الدخول الرئيسية
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص المتوازي والتنزيل والرفع المباشر إلى يوتيوب...")
+    print("🚀 بدء الفحص المتوازي ومعالجة 7 مقاطع من كل قناة...")
     access_token = get_access_token()
     if not access_token:
         print("❌ لم يتم العثور على Access Token صالح.")
         sys.exit(1)
 
     published_ids = get_published_history()
-    print(f"📊 إجمالي المقاطع المنشورة سابقاً: {len(published_ids)}")
+    print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [executor.submit(process_channel, ch, access_token, published_ids) for ch in CHANNELS]
@@ -258,7 +261,7 @@ def main():
             if quota_exceeded_flag:
                 break
 
-    print("🎉 اكتملت الدورة بنجاح!")
+    print("🎉 انتهت دورة العمل لهذه الفترة بنجاح!")
 
 if __name__ == "__main__":
     main()
