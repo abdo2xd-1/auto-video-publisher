@@ -5,7 +5,6 @@ import json
 import time
 import threading
 import requests
-import yt_dlp
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -15,7 +14,6 @@ from googleapiclient.http import MediaFileUpload
 # 1. قائمة الـ 20 قناة المختارة بدقة
 # ==========================================================
 CHANNELS = [
-    # القنوات المحددة من قبلك (7 قنوات)
     "https://www.youtube.com/@Engineer-M-Z",
     "https://www.youtube.com/@drmakerr",
     "https://www.youtube.com/@ahmedamrembabi97",
@@ -23,23 +21,17 @@ CHANNELS = [
     "https://www.youtube.com/@erza3ma3serry",
     "https://www.youtube.com/@santarama3gharib",
     "https://www.youtube.com/@KoraStation",
-
-    # أفضل قنوات صيانة الهواتف والمايكروسولدرينغ (6 قنوات)
     "https://www.youtube.com/@PhoneRepairGuru",
     "https://www.youtube.com/@HughJeffreys",
     "https://www.youtube.com/@JerryRigEverything",
     "https://www.youtube.com/@StrangeParts",
     "https://www.youtube.com/@TheArtofRepair",
     "https://www.youtube.com/@ThePhoneLab",
-
-    # أفضل قنوات صيانة الكمبيوتر، اللابتوب، وكروت الشاشة (5 قنوات)
     "https://www.youtube.com/@NorthridgeFix",
     "https://www.youtube.com/@Tronicsfix",
     "https://www.youtube.com/@NorthwestRepair",
     "https://www.youtube.com/@rossmanngroup",
     "https://www.youtube.com/@SalemTechsperts",
-
-    # أفضل قنوات صيانة الأجهزة والإلكترونيات (قناتان)
     "https://www.youtube.com/@BigCliveDotCom",
     "https://www.youtube.com/@ElectroBOOM"
 ]
@@ -120,13 +112,13 @@ def upload_to_youtube(video_path, title, access_token):
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
-        print(f"✅ [تم النشر بنجاح على قناتك] {clean_title} -> https://youtu.be/{response.get('id')}")
+        print(f"✅ [تم النشر بنجاح] {clean_title} -> https://youtu.be/{response.get('id')}")
         return True
 
     except Exception as e:
         err_msg = str(e)
         if "quotaExceeded" in err_msg:
-            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API المتاحة لحسابك اليوم.")
+            print("⚠️ تم استهلاك حصة الرفع اليومية للـ API.")
             quota_exceeded_flag = True
         else:
             print(f"❌ خطأ أثناء الرفع ({title}): {e}")
@@ -161,35 +153,68 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 6. التنزيل وتجاوز حظر البوتات عبر android_vr & web_safari
+# 6. التنزيل السحابي المباشر عبر خوادم Piped & Invidious
 # ==========================================================
 def download_video_stream(v_id, output_path):
-    video_url = f"https://www.youtube.com/watch?v={v_id}"
+    # خوادم Piped السحابية
+    piped_apis = [
+        "https://pipedapi.kavin.rocks",
+        "https://api.piped.yt",
+        "https://pipedapi.tokhmi.xyz"
+    ]
+    for api in piped_apis:
+        try:
+            res = requests.get(f"{api}/streams/{v_id}", timeout=8)
+            if res.status_code == 200:
+                data = res.json()
+                title = data.get("title", f"Tech Short {v_id}")
+                streams = [s for s in data.get("videoStreams", []) if not s.get("videoOnly", False) and s.get("format") == "MPEG_4"]
+                if not streams:
+                    streams = data.get("videoStreams", [])
 
-    ydl_opts = {
-        'format': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
-        'outtmpl': output_path,
-        'quiet': True,
-        'no_warnings': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android_vr', 'web_safari', 'android_creator']
-            }
-        }
-    }
+                if streams:
+                    stream_url = streams[0].get("url")
+                    with requests.get(stream_url, stream=True, timeout=25) as r:
+                        if r.status_code == 200:
+                            with open(output_path, 'wb') as f:
+                                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                                    if chunk:
+                                        f.write(chunk)
+                            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
+                                return True, title
+        except Exception:
+            continue
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-                return True, info.get("title", f"Short {v_id}")
-    except Exception as e:
-        print(f"⚠️ تنبيه تنزيل ({v_id}): {e}")
+    # خوادم Invidious السحابية
+    invidious_nodes = [
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de",
+        "https://yt.artemislena.eu"
+    ]
+    for node in invidious_nodes:
+        try:
+            res = requests.get(f"{node}/api/v1/videos/{v_id}", timeout=8)
+            if res.status_code == 200:
+                data = res.json()
+                title = data.get("title", f"Short {v_id}")
+                formats = data.get("formatStreams", [])
+                if formats:
+                    stream_url = formats[-1].get("url")
+                    with requests.get(stream_url, stream=True, timeout=25) as r:
+                        if r.status_code == 200:
+                            with open(output_path, 'wb') as f:
+                                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                                    if chunk:
+                                        f.write(chunk)
+                            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
+                                return True, title
+        except Exception:
+            continue
 
     return False, None
 
 # ==========================================================
-# 7. معالجة القناة
+# 7. معالجة القناة الفردية
 # ==========================================================
 def process_channel(channel_url, access_token, published_ids):
     global quota_exceeded_flag
@@ -210,7 +235,7 @@ def process_channel(channel_url, access_token, published_ids):
         if v_id in published_ids:
             continue
 
-        print(f"📥 [تنزيل مقطع] ({channel_name}) : ID {v_id}...")
+        print(f"📥 [تنزيل سحابي] ({channel_name}) : ID {v_id}...")
         filepath = f"downloads/{v_id}.mp4"
         success, v_title = download_video_stream(v_id, filepath)
 
@@ -229,7 +254,7 @@ def process_channel(channel_url, access_token, published_ids):
 # 8. نقطة الدخول الرئيسية
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص المتوازي ومعالجة 7 مقاطع من الـ 20 قناة...")
+    print("🚀 بدء الفحص المتوازي ومعالجة القنوات الـ 20...")
     access_token = get_access_token()
     if not access_token:
         print("❌ لم يتم العثور على Access Token صالح.")
@@ -238,14 +263,13 @@ def main():
     published_ids = get_published_history()
     print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
 
-    # معالجة متوازية عبر 3 قنوات في نفس اللحظة
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [executor.submit(process_channel, ch, access_token, published_ids) for ch in CHANNELS]
         for future in as_completed(futures):
             if quota_exceeded_flag:
                 break
 
-    print("🎉 انتهت دورة العمل بنجاح!")
+    print("🎉 اكتملت الدورة بنجاح!")
 
 if __name__ == "__main__":
     main()
