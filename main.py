@@ -1,53 +1,90 @@
 import os
 import sys
+import re
 import json
 import time
-import threading
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import yt_dlp
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================================
-# 1. قائمة الـ 20 حساباً (مع المعرفات البديلة لضمان الجلب)
+# 1. قائمة الـ 20 قناة المحددة
 # ==========================================================
-TARGET_ACCOUNTS = [
-    # الحسابات الـ 7 الأساسية
-    {"name": "Engineer M Z", "handles": ["engineermz", "engineer_m_z", "engineer.m.z"]},
-    {"name": "Dr Maker", "handles": ["drmakerr", "dr.maker", "drmaker"]},
-    {"name": "Ahmed Amr Embabi", "handles": ["ahmedamrembabi97", "ahmedamrembabi"]},
-    {"name": "Saba7o Korah", "handles": ["amr.nasoohy", "saba7okorah", "nasoohy"]},
-    {"name": "Erza3 Ma3 Serry", "handles": ["marwanserry", "erza3ma3serry"]},
-    {"name": "Santaramaghareeb", "handles": ["santaramaghareeb", "santarama_ghareeb"]},
-    {"name": "Kora Station", "handles": ["korastation", "kora_station"]},
+CHANNELS = [
+    # القنوات الـ 7 الأساسية
+    "https://www.youtube.com/@Engineer-M-Z",
+    "https://www.youtube.com/@drmakerr",
+    "https://www.youtube.com/@ahmedamrembabi97",
+    "https://www.youtube.com/@Saba7oKorah",
+    "https://www.youtube.com/@erza3ma3serry",
+    "https://www.youtube.com/@santarama3gharib",
+    "https://www.youtube.com/@KoraStation",
 
-    # أفضل 13 حساباً في صيانة الهاردوير والإلكترونيات
-    {"name": "Phone Repair Guru", "handles": ["phonerepairguru"]},
-    {"name": "JerryRigEverything", "handles": ["jerryrigeverything"]},
-    {"name": "Hugh Jeffreys", "handles": ["hughjeffreys"]},
-    {"name": "Strange Parts", "handles": ["strangeparts"]},
-    {"name": "The Art of Repair", "handles": ["theartofrepair"]},
-    {"name": "The Phone Lab", "handles": ["thephonelab", "thephonelabnl"]},
-    {"name": "NorthridgeFix", "handles": ["northridgefix"]},
-    {"name": "TronicsFix", "handles": ["tronicsfix"]},
-    {"name": "Northwest Repair", "handles": ["northwestrepair"]},
-    {"name": "Louis Rossmann", "handles": ["rossmanngroup", "louisrossmann"]},
-    {"name": "Salem Techsperts", "handles": ["salemtechsperts"]},
-    {"name": "Big Clive", "handles": ["bigclivedotcom", "bigclive"]},
-    {"name": "ElectroBOOM", "handles": ["electroboom", "electroboomok"]}
+    # أفضل 13 قناة في الصيانة والهاردوير
+    "https://www.youtube.com/@PhoneRepairGuru",
+    "https://www.youtube.com/@HughJeffreys",
+    "https://www.youtube.com/@JerryRigEverything",
+    "https://www.youtube.com/@StrangeParts",
+    "https://www.youtube.com/@TheArtofRepair",
+    "https://www.youtube.com/@ThePhoneLab",
+    "https://www.youtube.com/@NorthridgeFix",
+    "https://www.youtube.com/@Tronicsfix",
+    "https://www.youtube.com/@NorthwestRepair",
+    "https://www.youtube.com/@rossmanngroup",
+    "https://www.youtube.com/@SalemTechsperts",
+    "https://www.youtube.com/@BigCliveDotCom",
+    "https://www.youtube.com/@ElectroBOOM"
 ]
 
 HISTORY_FILE = "published_history.txt"
-history_lock = threading.Lock()
+COOKIES_FILE = "cookies.txt"
 quota_exceeded_flag = False
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-}
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # ==========================================================
-# 2. إدارة السجل لمنع التكرار
+# 2. بناء ملف الكوكيز بتنسيق Netscape صالح 100%
+# ==========================================================
+def setup_cookies():
+    raw_cookies = (os.getenv("YOUTUBE_COOKIES") or "").strip()
+    if not raw_cookies:
+        print("⚠️ لم يتم العثور على YOUTUBE_COOKIES في GitHub Secrets.")
+        return None
+
+    lines = [
+        "# Netscape HTTP Cookie File",
+        "# http://curl.haxx.se/rfc/cookie_spec.html",
+        "# This file was generated automatically by automation",
+        ""
+    ]
+
+    for line in raw_cookies.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = re.split(r'\s+', line)
+        if len(parts) >= 7:
+            domain = parts[0]
+            flag = parts[1]
+            path = parts[2]
+            secure = parts[3]
+            expiry = parts[4]
+            name = parts[5]
+            value = " ".join(parts[6:])
+            lines.append(f"{domain}\t{flag}\t{path}\t{secure}\t{expiry}\t{name}\t{value}")
+        else:
+            lines.append(line)
+
+    with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+    print(f"🍪 تم تهيئة ملف الكوكيز بنجاح ({len(lines)} سطراً).")
+    return COOKIES_FILE
+
+# ==========================================================
+# 3. إدارة السجل لمنع التكرار
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -56,12 +93,11 @@ def get_published_history():
         return set(line.strip() for line in f if line.strip())
 
 def record_published_video(video_id):
-    with history_lock:
-        with open(HISTORY_FILE, "a", encoding="utf-8") as f:
-            f.write(f"{video_id}\n")
+    with open(HISTORY_FILE, "a", encoding="utf-8") as f:
+        f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. توليد Access Token من Google
+# 4. توليد Access Token من Google
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -88,7 +124,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 4. الرفع على YouTube Shorts
+# 5. رفع الفيديو إلى YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -103,8 +139,8 @@ def upload_to_youtube(video_path, title, access_token):
         body = {
             "snippet": {
                 "title": clean_title,
-                "description": f"{title}\n\n#Shorts #Viral #Trending #Reels #Tech #Hardware",
-                "tags": ["Shorts", "Viral", "Trending", "Reels", "Tech", "Hardware"],
+                "description": f"{title}\n\n#Shorts #Tech #Repair #Hardware #Electronics #Viral",
+                "tags": ["Shorts", "Tech", "Repair", "Hardware", "Electronics", "Viral"],
                 "categoryId": "28"
             },
             "status": {
@@ -129,110 +165,138 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 5. جلب الفيديوهات عبر TikWM API السحابي
+# 6. استخراج معرفات المقاطع
 # ==========================================================
-def fetch_account_videos(handles, count=7):
-    for handle in handles:
+def get_channel_video_ids(channel_url, max_videos=7):
+    headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
+    urls_to_try = [f"{channel_url}/shorts", f"{channel_url}/videos"]
+    found_ids = []
+
+    for target in urls_to_try:
         try:
-            api_url = f"https://www.tikwm.com/api/user/posts?unique_id={handle}&count={count}"
-            res = requests.get(api_url, headers=HEADERS, timeout=12)
+            res = requests.get(target, headers=headers, timeout=10)
             if res.status_code == 200:
-                data = res.json()
-                if data.get("code") == 0:
-                    videos = data.get("data", {}).get("videos", [])
-                    if videos:
-                        return handle, videos[:count]
+                html = res.text
+                shorts_ids = re.findall(r'/shorts/([a-zA-Z0-9_-]{11})', html)
+                video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+
+                combined = list(dict.fromkeys(shorts_ids + video_ids))
+                for vid in combined:
+                    if vid not in found_ids:
+                        found_ids.append(vid)
+
+                if len(found_ids) >= max_videos:
+                    break
         except Exception:
             continue
-    return None, []
+
+    return found_ids[:max_videos]
 
 # ==========================================================
-# 6. تحميل الفيديو عبر رابطه المباشر
+# 7. التنزيل الذكي (yt-dlp مع الكوكيز + Cobalt كبديل فوري)
 # ==========================================================
-def download_stream_file(download_url, output_path):
-    try:
-        with requests.get(download_url, headers=HEADERS, stream=True, timeout=30) as r:
-            if r.status_code == 200:
-                with open(output_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            f.write(chunk)
+def download_video(v_id, output_path, cookie_path):
+    video_url = f"https://www.youtube.com/watch?v={v_id}"
+
+    # المحاولة 1: yt-dlp مع ملف الكوكيز المنسق
+    if cookie_path and os.path.exists(cookie_path):
+        try:
+            ydl_opts = {
+                'format': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+                'outtmpl': output_path,
+                'cookiefile': cookie_path,
+                'quiet': True,
+                'no_warnings': True
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=True)
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-                    return True
-    except Exception:
-        pass
-    return False
+                    return True, info.get("title", f"Short {v_id}")
+        except Exception:
+            pass
 
-# ==========================================================
-# 7. معالجة الحساب الواحد
-# ==========================================================
-def process_account(account, access_token, published_ids):
-    global quota_exceeded_flag
-    if quota_exceeded_flag:
-        return
+    # المحاولة 2: خوادم Cobalt السحابية
+    cobalt_servers = [
+        "https://api.cobalt.tools",
+        "https://cobalt-api.kwiatekm.pl",
+        "https://cobalt.xy2401.top"
+    ]
+    headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": USER_AGENT}
+    payload = {"url": video_url, "videoQuality": "720"}
 
-    acc_name = account["name"]
-    handles = account["handles"]
-    os.makedirs("downloads", exist_ok=True)
-
-    matched_handle, videos = fetch_account_videos(handles, count=7)
-    if not videos:
-        print(f"⚠️ [تخطي] لم يتم العثور على مقاطع لحساب {acc_name}")
-        return
-
-    print(f"🔍 [فحص الحساب بنجاح] {acc_name} (@{matched_handle}) - عُثر على {len(videos)} مقاطع.")
-
-    for vid_data in videos:
-        if quota_exceeded_flag:
-            break
-
-        v_id = vid_data.get("video_id")
-        if not v_id or v_id in published_ids:
+    for endpoint in cobalt_servers:
+        try:
+            res = requests.post(endpoint, headers=headers, json=payload, timeout=12)
+            if res.status_code == 200:
+                dl_url = res.json().get("url")
+                if dl_url:
+                    with requests.get(dl_url, stream=True, timeout=30) as r:
+                        if r.status_code == 200:
+                            with open(output_path, 'wb') as f:
+                                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                                    if chunk:
+                                        f.write(chunk)
+                            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
+                                return True, f"Short {v_id}"
+        except Exception:
             continue
 
-        v_title = vid_data.get("title") or f"{acc_name} Tech Video"
-        v_title = v_title.replace("#", "").strip()[:80]
-        play_url = vid_data.get("play") or vid_data.get("wmplay")
-
-        if not play_url:
-            continue
-
-        print(f"📥 [تحميل فيديو] ({acc_name}) : ID {v_id}...")
-        filepath = f"downloads/{v_id}.mp4"
-
-        if download_stream_file(play_url, filepath):
-            uploaded = upload_to_youtube(filepath, v_title, access_token)
-            if uploaded:
-                record_published_video(v_id)
-                published_ids.add(v_id)
-
-            try:
-                os.remove(filepath)
-            except OSError:
-                pass
-        else:
-            print(f"❌ تعذر تنزيل ملف الفيديو {v_id}")
+    return False, None
 
 # ==========================================================
-# 8. نقطة الدخول والتشغيل المتوازي
+# 8. نقطة الدخول والتشغيل التسلسلي المنظم
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص الشامل وتنزيل ونشر مقاطع الـ 20 حساباً على YouTube Shorts...")
+    print("🚀 بدء الفحص وتنزيل المقاطع ورفعها على YouTube Shorts...")
+    os.makedirs("downloads", exist_ok=True)
+    cookie_path = setup_cookies()
+
     access_token = get_access_token()
     if not access_token:
         print("❌ لم يتم العثور على Access Token صالح.")
         sys.exit(1)
 
     published_ids = get_published_history()
-    print(f"📊 إجمالي المقاطع المنشورة سابقاً في السجل: {len(published_ids)}")
+    print(f"📊 إجمالي المقاطع المسجلة سابقاً: {len(published_ids)}")
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(process_account, acc, access_token, published_ids) for acc in TARGET_ACCOUNTS]
-        for future in as_completed(futures):
+    for ch_url in CHANNELS:
+        if quota_exceeded_flag:
+            break
+
+        ch_name = ch_url.split('/')[-1]
+        video_ids = get_channel_video_ids(ch_url, max_videos=7)
+
+        if not video_ids:
+            continue
+
+        for v_id in video_ids:
             if quota_exceeded_flag:
                 break
 
-    print("🎉 اكتملت الدورة بنجاح تام!")
+            if v_id in published_ids:
+                continue
+
+            print(f"📥 [تنزيل مقطع] ({ch_name}) : ID {v_id}...")
+            filepath = f"downloads/{v_id}.mp4"
+            success, v_title = download_video(v_id, filepath, cookie_path)
+
+            if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
+                uploaded = upload_to_youtube(filepath, v_title, access_token)
+                if uploaded:
+                    record_published_video(v_id)
+                    published_ids.add(v_id)
+
+                try:
+                    os.remove(filepath)
+                except OSError:
+                    pass
+
+            time.sleep(1)
+
+    if cookie_path and os.path.exists(cookie_path):
+        os.remove(cookie_path)
+
+    print("🎉 انتهت دورة العمل بنجاح تام!")
 
 if __name__ == "__main__":
     main()
