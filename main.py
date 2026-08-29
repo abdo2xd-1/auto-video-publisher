@@ -13,7 +13,7 @@ from googleapiclient.http import MediaFileUpload
 # 1. قائمة الـ 20 قناة المستهدفة
 # ==========================================================
 CHANNELS = [
-    # القنوات الـ 7 المحددة من طرفك
+    # القنوات الـ 7 المحددة
     "https://www.youtube.com/@Engineer-M-Z",
     "https://www.youtube.com/@drmakerr",
     "https://www.youtube.com/@ahmedamrembabi97",
@@ -22,7 +22,7 @@ CHANNELS = [
     "https://www.youtube.com/@santarama3gharib",
     "https://www.youtube.com/@KoraStation",
 
-    # أفضل 13 قناة في الصيانة والهاردوير
+    # أفضل 13 قناة صيانة وهاردوير
     "https://www.youtube.com/@PhoneRepairGuru",
     "https://www.youtube.com/@HughJeffreys",
     "https://www.youtube.com/@JerryRigEverything",
@@ -41,8 +41,12 @@ CHANNELS = [
 HISTORY_FILE = "published_history.txt"
 quota_exceeded_flag = False
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+}
+
 # ==========================================================
-# 2. إدارة السجل لمنع تكرار النشر
+# 2. إدارة السجل لمنع التكرار
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -55,7 +59,7 @@ def record_published_video(video_id):
         f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. توليد Access Token من Google OAuth
+# 3. توليد Access Token من Google
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -123,36 +127,30 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 5. استخراج معرفات الفيديوهات عبر yt-dlp والبروكسي
+# 5. استخراج معرفات المقاطع بدقة وسرعة
 # ==========================================================
-def get_channel_video_ids(channel_url, proxy_url, max_videos=7):
-    ydl_opts = {
-        'extract_flat': 'in_playlist',
-        'playlist_items': f'1-{max_videos}',
-        'quiet': True,
-        'no_warnings': True,
-        'ignoreerrors': True
-    }
-    if proxy_url:
-        ydl_opts['proxy'] = proxy_url
-
-    found_ids = []
+def get_channel_video_ids(channel_url, max_videos=7):
     urls_to_try = [f"{channel_url}/shorts", f"{channel_url}/videos"]
+    found_ids = []
 
     for target in urls_to_try:
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(target, download=False)
-                if info and 'entries' in info:
-                    for entry in info['entries']:
-                        if entry and 'id' in entry:
-                            found_ids.append(entry['id'])
+            res = requests.get(target, headers=HEADERS, timeout=10)
+            if res.status_code == 200:
+                shorts_ids = re.findall(r'/shorts/([a-zA-Z0-9_-]{11})', res.text)
+                video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', res.text)
+
+                combined = list(dict.fromkeys(shorts_ids + video_ids))
+                for vid in combined:
+                    if vid not in found_ids:
+                        found_ids.append(vid)
+
                 if len(found_ids) >= max_videos:
                     break
         except Exception:
             continue
 
-    return list(dict.fromkeys(found_ids))[:max_videos]
+    return found_ids[:max_videos]
 
 # ==========================================================
 # 6. التنزيل المباشر عبر البروكسي
@@ -175,7 +173,7 @@ def download_video(v_id, output_path, proxy_url):
             if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
                 return True, info.get("title", f"Short {v_id}")
     except Exception as e:
-        print(f"⚠️ خطأ أثناء تنزيل المقطع ({v_id}): {e}")
+        print(f"⚠️ تنبيه تنزيل ({v_id}): {e}")
 
     return False, None
 
@@ -183,14 +181,14 @@ def download_video(v_id, output_path, proxy_url):
 # 7. التنفيذ الرئيسي
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص الشامل وتنزيل ونشر مقاطع الـ 20 قناة عبر البروكسي...")
+    print("🚀 بدء الفحص والتنزيل والرفع المباشر إلى YouTube...")
     os.makedirs("downloads", exist_ok=True)
 
     proxy_url = (os.getenv("PROXY_URL") or "").strip()
     if proxy_url:
-        print("🌐 تم تفعيل البروكسي السكني لتجاوز حظر YouTube بنجاح.")
+        print("🌐 تم تفعيل البروكسي بنجاح.")
     else:
-        print("⚠️ تحذير: لم يتم العثور على سر PROXY_URL.")
+        print("⚠️ تحذير: PROXY_URL غير مضبوط.")
 
     access_token = get_access_token()
     if not access_token:
@@ -206,7 +204,7 @@ def main():
 
         ch_name = ch_url.split('/')[-1]
         print(f"🔍 [فحص القناة] {ch_name}...")
-        video_ids = get_channel_video_ids(ch_url, proxy_url, max_videos=7)
+        video_ids = get_channel_video_ids(ch_url, max_videos=7)
 
         if not video_ids:
             print(f"⚠️ لم يتم العثور على مقاطع جديدة في {ch_name}")
@@ -236,7 +234,7 @@ def main():
 
             time.sleep(1)
 
-    print("🎉 انتهت دورة العمل ونشر الفيديوهات بنجاح تام!")
+    print("🎉 انتهت دورة العمل بنجاح تام!")
 
 if __name__ == "__main__":
     main()
