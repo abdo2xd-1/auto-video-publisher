@@ -41,10 +41,8 @@ CHANNELS = [
 HISTORY_FILE = "published_history.txt"
 quota_exceeded_flag = False
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-
 # ==========================================================
-# 2. إدارة السجل لمنع التكرار
+# 2. إدارة السجل لمنع تكرار النشر
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -57,7 +55,7 @@ def record_published_video(video_id):
         f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. توليد Access Token من Google
+# 3. توليد Access Token من Google OAuth
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -125,33 +123,36 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 5. استخراج معرفات المقاطع عبر البروكسي
+# 5. استخراج معرفات الفيديوهات عبر yt-dlp والبروكسي
 # ==========================================================
 def get_channel_video_ids(channel_url, proxy_url, max_videos=7):
-    headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
-    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-    urls_to_try = [f"{channel_url}/shorts", f"{channel_url}/videos"]
+    ydl_opts = {
+        'extract_flat': 'in_playlist',
+        'playlist_items': f'1-{max_videos}',
+        'quiet': True,
+        'no_warnings': True,
+        'ignoreerrors': True
+    }
+    if proxy_url:
+        ydl_opts['proxy'] = proxy_url
+
     found_ids = []
+    urls_to_try = [f"{channel_url}/shorts", f"{channel_url}/videos"]
 
     for target in urls_to_try:
         try:
-            res = requests.get(target, headers=headers, proxies=proxies, timeout=12)
-            if res.status_code == 200:
-                html = res.text
-                shorts_ids = re.findall(r'/shorts/([a-zA-Z0-9_-]{11})', html)
-                video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
-
-                combined = list(dict.fromkeys(shorts_ids + video_ids))
-                for vid in combined:
-                    if vid not in found_ids:
-                        found_ids.append(vid)
-
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(target, download=False)
+                if info and 'entries' in info:
+                    for entry in info['entries']:
+                        if entry and 'id' in entry:
+                            found_ids.append(entry['id'])
                 if len(found_ids) >= max_videos:
                     break
         except Exception:
             continue
 
-    return found_ids[:max_videos]
+    return list(dict.fromkeys(found_ids))[:max_videos]
 
 # ==========================================================
 # 6. التنزيل المباشر عبر البروكسي
@@ -174,7 +175,7 @@ def download_video(v_id, output_path, proxy_url):
             if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
                 return True, info.get("title", f"Short {v_id}")
     except Exception as e:
-        print(f"⚠️ خطأ أثناء التنزيل عبر البروكسي ({v_id}): {e}")
+        print(f"⚠️ خطأ أثناء تنزيل المقطع ({v_id}): {e}")
 
     return False, None
 
@@ -182,14 +183,14 @@ def download_video(v_id, output_path, proxy_url):
 # 7. التنفيذ الرئيسي
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص والتنزيل السحابي التلقائي عبر البروكسي...")
+    print("🚀 بدء الفحص الشامل وتنزيل ونشر مقاطع الـ 20 قناة عبر البروكسي...")
     os.makedirs("downloads", exist_ok=True)
 
     proxy_url = (os.getenv("PROXY_URL") or "").strip()
     if proxy_url:
         print("🌐 تم تفعيل البروكسي السكني لتجاوز حظر YouTube بنجاح.")
     else:
-        print("⚠️ لم يتم تعيين PROXY_URL في المتغيرات.")
+        print("⚠️ تحذير: لم يتم العثور على سر PROXY_URL.")
 
     access_token = get_access_token()
     if not access_token:
@@ -204,9 +205,11 @@ def main():
             break
 
         ch_name = ch_url.split('/')[-1]
+        print(f"🔍 [فحص القناة] {ch_name}...")
         video_ids = get_channel_video_ids(ch_url, proxy_url, max_videos=7)
 
         if not video_ids:
+            print(f"⚠️ لم يتم العثور على مقاطع جديدة في {ch_name}")
             continue
 
         for v_id in video_ids:
@@ -233,7 +236,7 @@ def main():
 
             time.sleep(1)
 
-    print("🎉 انتهت دورة النشر بنجاح تام!")
+    print("🎉 انتهت دورة العمل ونشر الفيديوهات بنجاح تام!")
 
 if __name__ == "__main__":
     main()
