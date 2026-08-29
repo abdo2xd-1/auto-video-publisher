@@ -10,10 +10,10 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================================
-# 1. قائمة الـ 20 قناة المحددة
+# 1. قائمة الـ 20 قناة المستهدفة
 # ==========================================================
 CHANNELS = [
-    # القنوات الـ 7 الأساسية
+    # القنوات الـ 7 المحددة من قبلك
     "https://www.youtube.com/@Engineer-M-Z",
     "https://www.youtube.com/@drmakerr",
     "https://www.youtube.com/@ahmedamrembabi97",
@@ -22,7 +22,7 @@ CHANNELS = [
     "https://www.youtube.com/@santarama3gharib",
     "https://www.youtube.com/@KoraStation",
 
-    # أفضل 13 قناة في الصيانة والهاردوير
+    # أفضل 13 قناة صيانة وهاردوير
     "https://www.youtube.com/@PhoneRepairGuru",
     "https://www.youtube.com/@HughJeffreys",
     "https://www.youtube.com/@JerryRigEverything",
@@ -39,52 +39,12 @@ CHANNELS = [
 ]
 
 HISTORY_FILE = "published_history.txt"
-COOKIES_FILE = "cookies.txt"
 quota_exceeded_flag = False
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 # ==========================================================
-# 2. بناء ملف الكوكيز بتنسيق Netscape صالح 100%
-# ==========================================================
-def setup_cookies():
-    raw_cookies = (os.getenv("YOUTUBE_COOKIES") or "").strip()
-    if not raw_cookies:
-        print("⚠️ لم يتم العثور على YOUTUBE_COOKIES في GitHub Secrets.")
-        return None
-
-    lines = [
-        "# Netscape HTTP Cookie File",
-        "# http://curl.haxx.se/rfc/cookie_spec.html",
-        "# This file was generated automatically by automation",
-        ""
-    ]
-
-    for line in raw_cookies.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = re.split(r'\s+', line)
-        if len(parts) >= 7:
-            domain = parts[0]
-            flag = parts[1]
-            path = parts[2]
-            secure = parts[3]
-            expiry = parts[4]
-            name = parts[5]
-            value = " ".join(parts[6:])
-            lines.append(f"{domain}\t{flag}\t{path}\t{secure}\t{expiry}\t{name}\t{value}")
-        else:
-            lines.append(line)
-
-    with open(COOKIES_FILE, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-
-    print(f"🍪 تم تهيئة ملف الكوكيز بنجاح ({len(lines)} سطراً).")
-    return COOKIES_FILE
-
-# ==========================================================
-# 3. إدارة السجل لمنع التكرار
+# 2. إدارة السجل لمنع التكرار
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -97,7 +57,7 @@ def record_published_video(video_id):
         f.write(f"{video_id}\n")
 
 # ==========================================================
-# 4. توليد Access Token من Google
+# 3. توليد Access Token من Google
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -124,7 +84,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 5. رفع الفيديو إلى YouTube Shorts
+# 4. رفع الفيديو إلى YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -165,7 +125,7 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 6. استخراج معرفات المقاطع
+# 5. استخراج معرفات المقاطع
 # ==========================================================
 def get_channel_video_ids(channel_url, max_videos=7):
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
@@ -193,63 +153,39 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 7. التنزيل الذكي (yt-dlp مع الكوكيز + Cobalt كبديل فوري)
+# 6. التنزيل المباشر
 # ==========================================================
-def download_video(v_id, output_path, cookie_path):
+def download_video(v_id, output_path):
     video_url = f"https://www.youtube.com/watch?v={v_id}"
 
-    # المحاولة 1: yt-dlp مع ملف الكوكيز المنسق
-    if cookie_path and os.path.exists(cookie_path):
-        try:
-            ydl_opts = {
-                'format': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
-                'outtmpl': output_path,
-                'cookiefile': cookie_path,
-                'quiet': True,
-                'no_warnings': True
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': output_path,
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web']
             }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=True)
-                if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-                    return True, info.get("title", f"Short {v_id}")
-        except Exception:
-            pass
+        }
+    }
 
-    # المحاولة 2: خوادم Cobalt السحابية
-    cobalt_servers = [
-        "https://api.cobalt.tools",
-        "https://cobalt-api.kwiatekm.pl",
-        "https://cobalt.xy2401.top"
-    ]
-    headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": USER_AGENT}
-    payload = {"url": video_url, "videoQuality": "720"}
-
-    for endpoint in cobalt_servers:
-        try:
-            res = requests.post(endpoint, headers=headers, json=payload, timeout=12)
-            if res.status_code == 200:
-                dl_url = res.json().get("url")
-                if dl_url:
-                    with requests.get(dl_url, stream=True, timeout=30) as r:
-                        if r.status_code == 200:
-                            with open(output_path, 'wb') as f:
-                                for chunk in r.iter_content(chunk_size=1024 * 1024):
-                                    if chunk:
-                                        f.write(chunk)
-                            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-                                return True, f"Short {v_id}"
-        except Exception:
-            continue
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
+                return True, info.get("title", f"Short {v_id}")
+    except Exception as e:
+        print(f"⚠️ خطأ تنزيل ({v_id}): {e}")
 
     return False, None
 
 # ==========================================================
-# 8. نقطة الدخول والتشغيل التسلسلي المنظم
+# 7. التنفيذ العام
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص وتنزيل المقاطع ورفعها على YouTube Shorts...")
+    print("🚀 بدء الفحص والتنزيل السحابي التلقائي...")
     os.makedirs("downloads", exist_ok=True)
-    cookie_path = setup_cookies()
 
     access_token = get_access_token()
     if not access_token:
@@ -276,9 +212,9 @@ def main():
             if v_id in published_ids:
                 continue
 
-            print(f"📥 [تنزيل مقطع] ({ch_name}) : ID {v_id}...")
+            print(f"📥 [معالجة مقطع] ({ch_name}) : ID {v_id}...")
             filepath = f"downloads/{v_id}.mp4"
-            success, v_title = download_video(v_id, filepath, cookie_path)
+            success, v_title = download_video(v_id, filepath)
 
             if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
                 uploaded = upload_to_youtube(filepath, v_title, access_token)
@@ -293,10 +229,7 @@ def main():
 
             time.sleep(1)
 
-    if cookie_path and os.path.exists(cookie_path):
-        os.remove(cookie_path)
-
-    print("🎉 انتهت دورة العمل بنجاح تام!")
+    print("🎉 انتهت دورة النشر بنجاح تام!")
 
 if __name__ == "__main__":
     main()
