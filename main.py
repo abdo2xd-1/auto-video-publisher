@@ -13,7 +13,7 @@ from googleapiclient.http import MediaFileUpload
 # 1. قائمة الـ 20 قناة المستهدفة
 # ==========================================================
 CHANNELS = [
-    # القنوات الـ 7 المحددة من قبلك
+    # القنوات الـ 7 المحددة من طرفك
     "https://www.youtube.com/@Engineer-M-Z",
     "https://www.youtube.com/@drmakerr",
     "https://www.youtube.com/@ahmedamrembabi97",
@@ -22,7 +22,7 @@ CHANNELS = [
     "https://www.youtube.com/@santarama3gharib",
     "https://www.youtube.com/@KoraStation",
 
-    # أفضل 13 قناة صيانة وهاردوير
+    # أفضل 13 قناة في الصيانة والهاردوير
     "https://www.youtube.com/@PhoneRepairGuru",
     "https://www.youtube.com/@HughJeffreys",
     "https://www.youtube.com/@JerryRigEverything",
@@ -125,16 +125,17 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 5. استخراج معرفات المقاطع
+# 5. استخراج معرفات المقاطع عبر البروكسي
 # ==========================================================
-def get_channel_video_ids(channel_url, max_videos=7):
+def get_channel_video_ids(channel_url, proxy_url, max_videos=7):
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
     urls_to_try = [f"{channel_url}/shorts", f"{channel_url}/videos"]
     found_ids = []
 
     for target in urls_to_try:
         try:
-            res = requests.get(target, headers=headers, timeout=10)
+            res = requests.get(target, headers=headers, proxies=proxies, timeout=12)
             if res.status_code == 200:
                 html = res.text
                 shorts_ids = re.findall(r'/shorts/([a-zA-Z0-9_-]{11})', html)
@@ -153,22 +154,19 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 6. التنزيل المباشر
+# 6. التنزيل المباشر عبر البروكسي
 # ==========================================================
-def download_video(v_id, output_path):
+def download_video(v_id, output_path, proxy_url):
     video_url = f"https://www.youtube.com/watch?v={v_id}"
 
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_path,
         'quiet': True,
-        'no_warnings': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web']
-            }
-        }
+        'no_warnings': True
     }
+    if proxy_url:
+        ydl_opts['proxy'] = proxy_url
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -176,16 +174,22 @@ def download_video(v_id, output_path):
             if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
                 return True, info.get("title", f"Short {v_id}")
     except Exception as e:
-        print(f"⚠️ خطأ تنزيل ({v_id}): {e}")
+        print(f"⚠️ خطأ أثناء التنزيل عبر البروكسي ({v_id}): {e}")
 
     return False, None
 
 # ==========================================================
-# 7. التنفيذ العام
+# 7. التنفيذ الرئيسي
 # ==========================================================
 def main():
-    print("🚀 بدء الفحص والتنزيل السحابي التلقائي...")
+    print("🚀 بدء الفحص والتنزيل السحابي التلقائي عبر البروكسي...")
     os.makedirs("downloads", exist_ok=True)
+
+    proxy_url = (os.getenv("PROXY_URL") or "").strip()
+    if proxy_url:
+        print("🌐 تم تفعيل البروكسي السكني لتجاوز حظر YouTube بنجاح.")
+    else:
+        print("⚠️ لم يتم تعيين PROXY_URL في المتغيرات.")
 
     access_token = get_access_token()
     if not access_token:
@@ -200,7 +204,7 @@ def main():
             break
 
         ch_name = ch_url.split('/')[-1]
-        video_ids = get_channel_video_ids(ch_url, max_videos=7)
+        video_ids = get_channel_video_ids(ch_url, proxy_url, max_videos=7)
 
         if not video_ids:
             continue
@@ -212,9 +216,9 @@ def main():
             if v_id in published_ids:
                 continue
 
-            print(f"📥 [معالجة مقطع] ({ch_name}) : ID {v_id}...")
+            print(f"📥 [تنزيل مقطع] ({ch_name}) : ID {v_id}...")
             filepath = f"downloads/{v_id}.mp4"
-            success, v_title = download_video(v_id, filepath)
+            success, v_title = download_video(v_id, filepath, proxy_url)
 
             if success and os.path.exists(filepath) and os.path.getsize(filepath) > 10000:
                 uploaded = upload_to_youtube(filepath, v_title, access_token)
