@@ -16,12 +16,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # تغيير IP السيرفر عبر Cloudflare WARP لتخطي الحظر
-      - name: Setup Cloudflare WARP
-        uses: fscarmen/warp-action@v1.1.2
-        with:
-          mode: warp
-
       - name: Install FFmpeg
         run: |
           sudo apt-get update -y
@@ -42,6 +36,7 @@ jobs:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
         run: |
           python main.py
 
