@@ -22,7 +22,7 @@ CHANNELS = [
     "https://www.youtube.com/@santarama3gharib",
     "https://www.youtube.com/@KoraStation",
 
-    # أفضل 13 قناة في الصيانة والهاردوير
+    # أفضل 13 قناة صيانة وهاردوير
     "https://www.youtube.com/@PhoneRepairGuru",
     "https://www.youtube.com/@HughJeffreys",
     "https://www.youtube.com/@JerryRigEverything",
@@ -46,28 +46,32 @@ HEADERS = {
 }
 
 # ==========================================================
-# 2. تنظيف وتنسيق رابط البروكسي تلقائياً لمنع أي خطأ Parse
+# 2. تحويل البروكسي لـ SOCKS5 وتنسيقه تلقائياً لتفادي 407
 # ==========================================================
 def clean_proxy_url(raw_proxy):
     if not raw_proxy:
         return None
     s = raw_proxy.strip().strip('"').strip("'").replace("\r", "").replace("\n", "")
-    
-    # في حال تم نسخ أمر curl بالكامل بالخطأ
     if " " in s:
         m = re.search(r'(?:https?|socks5)://[^\s"\']+', s)
         if m:
             s = m.group(0)
-            
-    # حذف أي سلاش في نهاية الرابط لمنع خطأ urllib3
     s = s.rstrip('/')
-    
+
+    # التحويل التلقائي لـ SOCKS5 على المنفذ 1080 لحل مشكلة المصادقة
+    if "webshare.io" in s:
+        if "@" in s:
+            creds = s.split("@")[0].split("//")[-1]
+            s = f"socks5://{creds}@p.webshare.io:1080"
+        else:
+            s = "socks5://p.webshare.io:1080"
+
     if not s.startswith("http://") and not s.startswith("https://") and not s.startswith("socks5://"):
-        s = "http://" + s
+        s = "socks5://" + s
     return s
 
 # ==========================================================
-# 3. إدارة السجل لمنع تكرار النشر
+# 3. إدارة السجل لمنع التكرار
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -174,7 +178,7 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 7. التنزيل المباشر عبر البروكسي
+# 7. التنزيل الذكي عبر SOCKS5
 # ==========================================================
 def download_video(v_id, output_path, proxy_url):
     video_url = f"https://www.youtube.com/watch?v={v_id}"
@@ -208,7 +212,7 @@ def main():
     raw_proxy = os.getenv("PROXY_URL")
     proxy_url = clean_proxy_url(raw_proxy)
     if proxy_url:
-        print(f"🌐 تم تفعيل البروكسي وتنظيف الرابط بنجاح: {proxy_url.split('@')[-1]}")
+        print(f"🌐 تم تفعيل البروكسي (SOCKS5): {proxy_url.split('@')[-1]}")
     else:
         print("⚠️ تحذير: PROXY_URL غير مضبوط.")
 
