@@ -22,7 +22,7 @@ CHANNELS = [
     "https://www.youtube.com/@santarama3gharib",
     "https://www.youtube.com/@KoraStation",
 
-    # أفضل 13 قناة صيانة وهاردوير
+    # أفضل 13 قناة في الصيانة والهاردوير
     "https://www.youtube.com/@PhoneRepairGuru",
     "https://www.youtube.com/@HughJeffreys",
     "https://www.youtube.com/@JerryRigEverything",
@@ -46,7 +46,18 @@ HEADERS = {
 }
 
 # ==========================================================
-# 2. إدارة السجل لمنع التكرار
+# 2. تنظيف وتنسيق رابط البروكسي تلقائياً
+# ==========================================================
+def clean_proxy_url(raw_proxy):
+    if not raw_proxy:
+        return None
+    cleaned = raw_proxy.strip().strip('"').strip("'").replace(" ", "").replace("\r", "").replace("\n", "")
+    if not cleaned.startswith("http://") and not cleaned.startswith("https://") and not cleaned.startswith("socks5://"):
+        cleaned = "http://" + cleaned
+    return cleaned
+
+# ==========================================================
+# 3. إدارة السجل لمنع التكرار
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -59,7 +70,7 @@ def record_published_video(video_id):
         f.write(f"{video_id}\n")
 
 # ==========================================================
-# 3. توليد Access Token من Google
+# 4. توليد Access Token من Google
 # ==========================================================
 def get_access_token():
     refresh_token = (os.getenv("YOUTUBE_REFRESH_TOKEN") or "").strip()
@@ -86,7 +97,7 @@ def get_access_token():
         return None
 
 # ==========================================================
-# 4. رفع الفيديو إلى YouTube Shorts
+# 5. رفع الفيديو إلى YouTube Shorts
 # ==========================================================
 def upload_to_youtube(video_path, title, access_token):
     global quota_exceeded_flag
@@ -127,7 +138,7 @@ def upload_to_youtube(video_path, title, access_token):
         return False
 
 # ==========================================================
-# 5. استخراج معرفات المقاطع بدقة وسرعة
+# 6. استخراج معرفات المقاطع بدقة وسرعة
 # ==========================================================
 def get_channel_video_ids(channel_url, max_videos=7):
     urls_to_try = [f"{channel_url}/shorts", f"{channel_url}/videos"]
@@ -153,7 +164,7 @@ def get_channel_video_ids(channel_url, max_videos=7):
     return found_ids[:max_videos]
 
 # ==========================================================
-# 6. التنزيل المباشر عبر البروكسي
+# 7. التنزيل المباشر عبر البروكسي
 # ==========================================================
 def download_video(v_id, output_path, proxy_url):
     video_url = f"https://www.youtube.com/watch?v={v_id}"
@@ -178,15 +189,16 @@ def download_video(v_id, output_path, proxy_url):
     return False, None
 
 # ==========================================================
-# 7. التنفيذ الرئيسي
+# 8. التنفيذ الرئيسي
 # ==========================================================
 def main():
     print("🚀 بدء الفحص والتنزيل والرفع المباشر إلى YouTube...")
     os.makedirs("downloads", exist_ok=True)
 
-    proxy_url = (os.getenv("PROXY_URL") or "").strip()
+    raw_proxy = os.getenv("PROXY_URL")
+    proxy_url = clean_proxy_url(raw_proxy)
     if proxy_url:
-        print("🌐 تم تفعيل البروكسي بنجاح.")
+        print("🌐 تم تفعيل البروكسي وتنظيف الرابط بنجاح.")
     else:
         print("⚠️ تحذير: PROXY_URL غير مضبوط.")
 
