@@ -46,18 +46,28 @@ HEADERS = {
 }
 
 # ==========================================================
-# 2. تنظيف وتنسيق رابط البروكسي تلقائياً
+# 2. تنظيف وتنسيق رابط البروكسي تلقائياً لمنع أي خطأ Parse
 # ==========================================================
 def clean_proxy_url(raw_proxy):
     if not raw_proxy:
         return None
-    cleaned = raw_proxy.strip().strip('"').strip("'").replace(" ", "").replace("\r", "").replace("\n", "")
-    if not cleaned.startswith("http://") and not cleaned.startswith("https://") and not cleaned.startswith("socks5://"):
-        cleaned = "http://" + cleaned
-    return cleaned
+    s = raw_proxy.strip().strip('"').strip("'").replace("\r", "").replace("\n", "")
+    
+    # في حال تم نسخ أمر curl بالكامل بالخطأ
+    if " " in s:
+        m = re.search(r'(?:https?|socks5)://[^\s"\']+', s)
+        if m:
+            s = m.group(0)
+            
+    # حذف أي سلاش في نهاية الرابط لمنع خطأ urllib3
+    s = s.rstrip('/')
+    
+    if not s.startswith("http://") and not s.startswith("https://") and not s.startswith("socks5://"):
+        s = "http://" + s
+    return s
 
 # ==========================================================
-# 3. إدارة السجل لمنع التكرار
+# 3. إدارة السجل لمنع تكرار النشر
 # ==========================================================
 def get_published_history():
     if not os.path.exists(HISTORY_FILE):
@@ -170,7 +180,7 @@ def download_video(v_id, output_path, proxy_url):
     video_url = f"https://www.youtube.com/watch?v={v_id}"
 
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'format': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
         'outtmpl': output_path,
         'quiet': True,
         'no_warnings': True
@@ -198,7 +208,7 @@ def main():
     raw_proxy = os.getenv("PROXY_URL")
     proxy_url = clean_proxy_url(raw_proxy)
     if proxy_url:
-        print("🌐 تم تفعيل البروكسي وتنظيف الرابط بنجاح.")
+        print(f"🌐 تم تفعيل البروكسي وتنظيف الرابط بنجاح: {proxy_url.split('@')[-1]}")
     else:
         print("⚠️ تحذير: PROXY_URL غير مضبوط.")
 
